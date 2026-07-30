@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '@/types/factory';
 import { TrindadeLogo } from './TrindadeLogo';
+import { subscribeUsers, saveUserToFirestore, deleteUserFromFirestore } from '@/lib/firestoreSync';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -161,26 +162,45 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const loadSavedUsers = () => {
     if (typeof window !== 'undefined') {
+      const deletedIdsStr = localStorage.getItem('trindade_deleted_user_ids');
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
       const savedUsers = localStorage.getItem('trindade_users_list');
       if (savedUsers) {
         try {
           const parsed = JSON.parse(savedUsers);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setUsersList(parsed);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter((u: UserProfile) => u.id && !deletedIds.includes(u.id));
+            setUsersList(filtered);
             return;
           }
         } catch (e) {
           console.error('Failed to load trindade_users_list', e);
         }
       }
+      setUsersList(DEFAULT_USERS.filter((u) => Boolean(u.id && !deletedIds.includes(u.id))));
     }
   };
 
   React.useEffect(() => {
-    queueMicrotask(() => loadSavedUsers());
+    loadSavedUsers();
+
+    const unsub = subscribeUsers((firestoreUsers) => {
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+
+      if (firestoreUsers && firestoreUsers.length > 0) {
+        const filtered = firestoreUsers.filter((u) => u.id && !deletedIds.includes(u.id));
+        setUsersList(filtered);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('trindade_users_list', JSON.stringify(filtered));
+        }
+      }
+    });
+
     window.addEventListener('storage', loadSavedUsers);
     window.addEventListener('trindade_users_updated', loadSavedUsers);
     return () => {
+      unsub();
       window.removeEventListener('storage', loadSavedUsers);
       window.removeEventListener('trindade_users_updated', loadSavedUsers);
     };
@@ -196,11 +216,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   if (!isOpen) return null;
 
   const saveUsersList = (updated: UserProfile[]) => {
-    setUsersList(updated);
+    const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;
+    const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+    const filtered = updated.filter((u) => u.id && !deletedIds.includes(u.id));
+
+    setUsersList(filtered);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('trindade_users_list', JSON.stringify(updated));
+      localStorage.setItem('trindade_users_list', JSON.stringify(filtered));
       window.dispatchEvent(new Event('trindade_users_updated'));
     }
+
+    filtered.forEach((u) => {
+      saveUserToFirestore(u).catch(() => {});
+    });
   };
 
   const getInitial = (nameStr: string) => {
@@ -367,6 +395,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const handleDeleteUser = (idToDelete?: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!idToDelete) return;
+
+    if (typeof window !== 'undefined') {
+      const deletedIdsStr = localStorage.getItem('trindade_deleted_user_ids');
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      if (!deletedIds.includes(idToDelete)) {
+        deletedIds.push(idToDelete);
+        localStorage.setItem('trindade_deleted_user_ids', JSON.stringify(deletedIds));
+      }
+    }
+
+    deleteUserFromFirestore(idToDelete).catch((err) => console.error('Error deleting user from Firestore:', err));
+
     const updated = usersList.filter((u) => u.id !== idToDelete);
     saveUsersList(updated);
   };

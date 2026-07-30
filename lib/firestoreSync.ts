@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { OrderItem, Store, AssemblyOperator } from '@/types/factory';
+import { OrderItem, Store, AssemblyOperator, UserProfile } from '@/types/factory';
 
 /**
  * Escuta em tempo real a coleção de Pedidos no Firestore
@@ -104,3 +104,41 @@ export const saveOperatorToFirestore = async (operator: AssemblyOperator) => {
   if (!operator.id) return;
   await setDoc(doc(db, 'operators', operator.id), operator, { merge: true });
 };
+
+/**
+ * Escuta em tempo real a coleção de Usuários no Firestore
+ */
+export const subscribeUsers = (onUpdate: (users: UserProfile[]) => void) => {
+  const usersRef = collection(db, 'users');
+  return onSnapshot(
+    usersRef,
+    (snapshot) => {
+      const list: UserProfile[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as UserProfile);
+      });
+      onUpdate(list);
+    },
+    (err) => {
+      console.error('Erro no ouvinte de Usuários do Firestore:', err);
+    }
+  );
+};
+
+/**
+ * Salva ou atualiza um usuário no Firestore
+ */
+export const saveUserToFirestore = async (user: UserProfile) => {
+  if (!user.id) return;
+  const docRef = doc(db, 'users', user.id);
+  await setDoc(docRef, user, { merge: true });
+};
+
+/**
+ * Remove um usuário do Firestore
+ */
+export const deleteUserFromFirestore = async (userId: string) => {
+  if (!userId) return;
+  await deleteDoc(doc(db, 'users', userId));
+};
+

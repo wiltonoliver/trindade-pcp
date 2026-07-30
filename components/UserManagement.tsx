@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, UserPermissions, UserStatus, AssemblyOperator } from '@/types/factory';
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { TrindadeLogo } from './TrindadeLogo';
+import { subscribeUsers, saveUserToFirestore, deleteUserFromFirestore } from '@/lib/firestoreSync';
 
 interface UserManagementProps {
   currentUser?: UserProfile | null;
@@ -13,6 +14,30 @@ interface UserManagementProps {
 }
 
 const INITIAL_USERS: UserProfile[] = [
+  {
+    id: 'usr-dev-master',
+    name: 'Desenvolvedor do Sistema',
+    role: 'Desenvolvedor / SuperAdmin (DEV)',
+    email: 'dev@trindadeesquadrias.com.br',
+    plant: 'Acesso Global - Matriz & Filiais',
+    status: 'approved',
+    isAdmin: true,
+    password: 'dev123',
+    permissions: {
+      canEditProduction: true,
+      canCreateOrder: true,
+      canManageStores: true,
+      canManageUsers: true,
+      canAccessOrderEntry: true,
+      canAccessDashboard: true,
+      canAccessProductivity: true,
+      canAccessStores: true,
+      canAccessUsers: true,
+      canAccessReports: true,
+      canAccessHistory: true,
+    },
+    createdAt: '2026-01-01',
+  },
   {
     id: 'usr-1',
     name: 'Wilton Oliver',
@@ -146,13 +171,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
   const loadUsersFromStorage = () => {
     if (typeof window !== 'undefined') {
+      const deletedIdsStr = localStorage.getItem('trindade_deleted_user_ids');
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
       const saved = localStorage.getItem('trindade_users_list');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter((u: UserProfile) => u.id && !deletedIds.includes(u.id));
             setUsers(
-              parsed.map((u: UserProfile) => ({
+              filtered.map((u: UserProfile) => ({
                 ...u,
                 status: u.status || 'approved',
                 permissions: u.permissions || {
@@ -163,19 +191,36 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                 },
               }))
             );
+            return;
           }
         } catch (e) {
           console.error('Failed to parse users from localStorage', e);
         }
       }
+      setUsers(INITIAL_USERS.filter((u) => Boolean(u.id && !deletedIds.includes(u.id))));
     }
   };
 
   useEffect(() => {
-    queueMicrotask(() => loadUsersFromStorage());
+    loadUsersFromStorage();
+
+    const unsub = subscribeUsers((firestoreUsers) => {
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+
+      if (firestoreUsers && firestoreUsers.length > 0) {
+        const filtered = firestoreUsers.filter((u) => u.id && !deletedIds.includes(u.id));
+        setUsers(filtered);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('trindade_users_list', JSON.stringify(filtered));
+        }
+      }
+    });
+
     window.addEventListener('storage', loadUsersFromStorage);
     window.addEventListener('trindade_users_updated', loadUsersFromStorage);
     return () => {
+      unsub();
       window.removeEventListener('storage', loadUsersFromStorage);
       window.removeEventListener('trindade_users_updated', loadUsersFromStorage);
     };
@@ -325,11 +370,19 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
   // Save to localStorage when users list updates
   const updateUsersList = (newUsers: UserProfile[]) => {
-    setUsers(newUsers);
+    const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;
+    const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+    const filtered = newUsers.filter((u) => u.id && !deletedIds.includes(u.id));
+
+    setUsers(filtered);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('trindade_users_list', JSON.stringify(newUsers));
+      localStorage.setItem('trindade_users_list', JSON.stringify(filtered));
       window.dispatchEvent(new Event('trindade_users_updated'));
     }
+
+    filtered.forEach((u) => {
+      saveUserToFirestore(u).catch(() => {});
+    });
   };
 
   const openApproveModal = (user: UserProfile) => {
@@ -464,7 +517,20 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
   const handleDeleteUser = () => {
     if (!userToDelete || !userToDelete.id) return;
-    const updated = users.filter((u) => u.id !== userToDelete.id);
+    const deletedId = userToDelete.id;
+
+    if (typeof window !== 'undefined') {
+      const deletedIdsStr = localStorage.getItem('trindade_deleted_user_ids');
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      if (!deletedIds.includes(deletedId)) {
+        deletedIds.push(deletedId);
+        localStorage.setItem('trindade_deleted_user_ids', JSON.stringify(deletedIds));
+      }
+    }
+
+    deleteUserFromFirestore(deletedId).catch((err) => console.error('Error deleting user from Firestore:', err));
+
+    const updated = users.filter((u) => u.id !== deletedId);
     updateUsersList(updated);
     setUserToDelete(null);
   };
