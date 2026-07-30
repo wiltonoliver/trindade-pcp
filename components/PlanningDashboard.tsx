@@ -358,6 +358,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   <div className="flex items-center gap-1.5 overflow-hidden">
                     <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dotColor}`} />
                     <h3
+                      suppressHydrationWarning
                       className="font-bold text-[11px] text-slate-700 uppercase tracking-tight truncate"
                       title={col.title}
                     >
@@ -552,7 +553,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                               className="bg-white border border-slate-200 text-slate-700 text-[10px] font-semibold rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[125px] truncate"
                             >
                               {columnsConfig.map((c) => (
-                                <option key={c.id} value={c.id}>
+                                <option key={c.id} value={c.id} suppressHydrationWarning>
                                   {c.title}
                                 </option>
                               ))}
@@ -614,7 +615,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-base text-slate-900">{sectionTitle}</h3>
+                        <h3 suppressHydrationWarning className="font-bold text-base text-slate-900">{sectionTitle}</h3>
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${col.badgeBg} ${col.badgeText}`}>
                           {colOrders.length} {colOrders.length === 1 ? 'pedido' : 'pedidos'}
                         </span>
@@ -895,7 +896,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                   >
                     {columnsConfig.map((c) => (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id} suppressHydrationWarning>
                         {c.title}
                       </option>
                     ))}
