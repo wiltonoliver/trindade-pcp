@@ -167,22 +167,6 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
         {/* Form Column (7 cols) */}
         <section className="lg:col-span-7 space-y-6">
           <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
-            {/* Date Selection */}
-            <div>
-              <div className="space-y-2 max-w-sm">
-                <label className="font-semibold text-xs text-slate-500 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px]">event_note</span>
-                  <span>Data de Referência da Demanda</span>
-                </label>
-                <input
-                  type="date"
-                  value={referenceDate}
-                  onChange={(e) => setReferenceDate(e.target.value)}
-                  className="w-full bg-slate-100 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium text-slate-900"
-                />
-              </div>
-            </div>
-
             {/* Email Text Area */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
