@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, UserPermissions, UserStatus, AssemblyOperator } from '@/types/factory';
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { TrindadeLogo } from './TrindadeLogo';
-import { subscribeUsers, saveUserToFirestore, deleteUserFromFirestore } from '@/lib/firestoreSync';
+import { subscribeUsers, saveUserToFirestore, deleteUserFromFirestore, deleteOperatorFromFirestore } from '@/lib/firestoreSync';
 
 interface UserManagementProps {
   currentUser?: UserProfile | null;
@@ -363,6 +363,15 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   const handleDeleteOperator = (opId: string) => {
+    if (typeof window !== 'undefined') {
+      const deletedIdsStr = localStorage.getItem('trindade_deleted_operator_ids');
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      if (!deletedIds.includes(opId)) {
+        deletedIds.push(opId);
+        localStorage.setItem('trindade_deleted_operator_ids', JSON.stringify(deletedIds));
+      }
+    }
+    deleteOperatorFromFirestore(opId).catch((err) => console.error('Erro ao excluir operador do Firestore:', err));
     const updated = operators.filter((op) => op.id !== opId);
     if (setOperators) setOperators(updated);
     setOperatorToDelete(null);

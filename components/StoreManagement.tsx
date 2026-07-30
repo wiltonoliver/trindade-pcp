@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Store } from '@/types/factory';
+import { deleteStoreFromFirestore } from '@/lib/firestoreSync';
 
 interface StoreManagementProps {
   stores: Store[];
@@ -111,7 +112,19 @@ export const StoreManagement: React.FC<StoreManagementProps> = ({
   const confirmDeleteStore = () => {
     if (!storeToDelete) return;
     const name = storeToDelete.name;
-    setStores((prev) => prev.filter((s) => s.id !== storeToDelete.id));
+    const deletedId = storeToDelete.id;
+    if (deletedId) {
+      if (typeof window !== 'undefined') {
+        const deletedIdsStr = localStorage.getItem('trindade_deleted_store_ids');
+        const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+        if (!deletedIds.includes(deletedId)) {
+          deletedIds.push(deletedId);
+          localStorage.setItem('trindade_deleted_store_ids', JSON.stringify(deletedIds));
+        }
+      }
+      deleteStoreFromFirestore(deletedId).catch((err) => console.error('Erro ao excluir loja do Firestore:', err));
+    }
+    setStores((prev) => prev.filter((s) => s.id !== deletedId));
     setStoreToDelete(null);
     showToast(`Loja "${name}" excluída com sucesso!`);
   };

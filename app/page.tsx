@@ -70,6 +70,12 @@ export default function FactoryOpsApp() {
       const savedOrders = localStorage.getItem('factoryops_orders');
       const savedStores = localStorage.getItem('factoryops_stores');
       const savedOperators = localStorage.getItem('factoryops_operators');
+      const deletedOrderIdsStr = localStorage.getItem('trindade_deleted_order_ids');
+      const deletedOrderIds: string[] = deletedOrderIdsStr ? JSON.parse(deletedOrderIdsStr) : [];
+      const deletedStoreIdsStr = localStorage.getItem('trindade_deleted_store_ids');
+      const deletedStoreIds: string[] = deletedStoreIdsStr ? JSON.parse(deletedStoreIdsStr) : [];
+      const deletedOpIdsStr = localStorage.getItem('trindade_deleted_operator_ids');
+      const deletedOpIds: string[] = deletedOpIdsStr ? JSON.parse(deletedOpIdsStr) : [];
 
       if (savedOrders) {
         try {
@@ -80,14 +86,16 @@ export default function FactoryOpsApp() {
             setOrders([]);
           } else if (Array.isArray(parsed)) {
             const seenIds = new Set<string>();
-            const sanitizedOrders = parsed.map((o: OrderItem, index: number) => {
-              let uniqueId = o.id || `item-${Date.now()}-${index}`;
-              if (seenIds.has(uniqueId)) {
-                uniqueId = `${uniqueId}-dup-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`;
-              }
-              seenIds.add(uniqueId);
-              return { ...o, id: uniqueId, unit: sanitizeUnit(o.unit) };
-            });
+            const sanitizedOrders = parsed
+              .filter((o: OrderItem) => o.id && !deletedOrderIds.includes(o.id))
+              .map((o: OrderItem, index: number) => {
+                let uniqueId = o.id || `item-${Date.now()}-${index}`;
+                if (seenIds.has(uniqueId)) {
+                  uniqueId = `${uniqueId}-dup-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`;
+                }
+                seenIds.add(uniqueId);
+                return { ...o, id: uniqueId, unit: sanitizeUnit(o.unit) };
+              });
             setOrders(sanitizedOrders);
           }
         } catch (e) {
@@ -103,8 +111,9 @@ export default function FactoryOpsApp() {
           if (hasLegacyStores) {
             localStorage.removeItem('factoryops_stores');
             setStores([]);
-          } else {
-            setStores(parsedStores);
+          } else if (Array.isArray(parsedStores)) {
+            const filteredStores = parsedStores.filter((s: Store) => s.id && !deletedStoreIds.includes(s.id));
+            setStores(filteredStores);
           }
         } catch (e) {
           console.error('Error parsing saved stores from localStorage', e);
@@ -115,12 +124,15 @@ export default function FactoryOpsApp() {
       if (savedOperators) {
         try {
           const parsedOps = JSON.parse(savedOperators);
-          if (Array.isArray(parsedOps) && parsedOps.length > 0) {
-            setOperators(parsedOps);
+          if (Array.isArray(parsedOps)) {
+            const filteredOps = parsedOps.filter((op: AssemblyOperator) => op.id && !deletedOpIds.includes(op.id));
+            setOperators(filteredOps);
           }
         } catch (e) {
           console.error('Error parsing saved operators from localStorage', e);
         }
+      } else if (deletedOpIds.length > 0) {
+        setOperators(INITIAL_OPERATORS.filter((op) => !deletedOpIds.includes(op.id)));
       }
 
       setIsLoaded(true);
@@ -143,6 +155,10 @@ export default function FactoryOpsApp() {
     localStorage.removeItem('factoryops_operators');
     localStorage.removeItem('factoryops_pending');
     localStorage.removeItem('factoryops_problems');
+    localStorage.removeItem('trindade_deleted_order_ids');
+    localStorage.removeItem('trindade_deleted_store_ids');
+    localStorage.removeItem('trindade_deleted_user_ids');
+    localStorage.removeItem('trindade_deleted_operator_ids');
     setOrders([]);
     setStores([]);
     setOperators(INITIAL_OPERATORS);
@@ -153,20 +169,38 @@ export default function FactoryOpsApp() {
     if (!isLoaded) return;
 
     const unsubOrders = subscribeOrders((remoteOrders) => {
-      if (remoteOrders && remoteOrders.length > 0) {
-        setOrders(remoteOrders);
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_order_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      if (remoteOrders) {
+        const filtered = remoteOrders.filter((o) => o.id && !deletedIds.includes(o.id));
+        setOrders(filtered);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('factoryops_orders', JSON.stringify(filtered));
+        }
       }
     });
 
     const unsubStores = subscribeStores((remoteStores) => {
-      if (remoteStores && remoteStores.length > 0) {
-        setStores(remoteStores);
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_store_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      if (remoteStores) {
+        const filtered = remoteStores.filter((s) => s.id && !deletedIds.includes(s.id));
+        setStores(filtered);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('factoryops_stores', JSON.stringify(filtered));
+        }
       }
     });
 
     const unsubOperators = subscribeOperators((remoteOps) => {
-      if (remoteOps && remoteOps.length > 0) {
-        setOperators(remoteOps);
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_operator_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      if (remoteOps) {
+        const filtered = remoteOps.filter((op) => op.id && !deletedIds.includes(op.id));
+        setOperators(filtered);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('factoryops_operators', JSON.stringify(filtered));
+        }
       }
     });
 
@@ -179,8 +213,11 @@ export default function FactoryOpsApp() {
 
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem('factoryops_orders', JSON.stringify(orders));
-      orders.forEach((ord) => {
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_order_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      const filtered = orders.filter((o) => o.id && !deletedIds.includes(o.id));
+      localStorage.setItem('factoryops_orders', JSON.stringify(filtered));
+      filtered.forEach((ord) => {
         saveOrderToFirestore(ord).catch((e) => console.error('Firestore order error:', e));
       });
     }
@@ -188,8 +225,11 @@ export default function FactoryOpsApp() {
 
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem('factoryops_stores', JSON.stringify(stores));
-      stores.forEach((st) => {
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_store_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      const filtered = stores.filter((s) => s.id && !deletedIds.includes(s.id));
+      localStorage.setItem('factoryops_stores', JSON.stringify(filtered));
+      filtered.forEach((st) => {
         saveStoreToFirestore(st).catch((e) => console.error('Firestore store error:', e));
       });
     }
@@ -197,8 +237,11 @@ export default function FactoryOpsApp() {
 
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem('factoryops_operators', JSON.stringify(operators));
-      operators.forEach((op) => {
+      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_operator_ids') : null;
+      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+      const filtered = operators.filter((op) => op.id && !deletedIds.includes(op.id));
+      localStorage.setItem('factoryops_operators', JSON.stringify(filtered));
+      filtered.forEach((op) => {
         saveOperatorToFirestore(op).catch((e) => console.error('Firestore operator error:', e));
       });
     }

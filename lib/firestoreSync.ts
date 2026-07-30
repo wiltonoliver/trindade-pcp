@@ -106,6 +106,14 @@ export const saveOperatorToFirestore = async (operator: AssemblyOperator) => {
 };
 
 /**
+ * Remove um operador do Firestore
+ */
+export const deleteOperatorFromFirestore = async (operatorId: string) => {
+  if (!operatorId) return;
+  await deleteDoc(doc(db, 'operators', operatorId));
+};
+
+/**
  * Escuta em tempo real a coleção de Usuários no Firestore
  */
 export const subscribeUsers = (onUpdate: (users: UserProfile[]) => void) => {

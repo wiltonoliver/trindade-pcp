@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator } from '@/types/factory';
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { OrderStatusModal } from './OrderStatusModal';
+import { deleteOrderFromFirestore } from '@/lib/firestoreSync';
 
 interface PlanningDashboardProps {
   orders: OrderItem[];
@@ -961,7 +962,19 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setOrders((prev) => prev.filter((o) => o.id !== orderToDelete.id));
+                  const deletedId = orderToDelete.id;
+                  if (deletedId) {
+                    if (typeof window !== 'undefined') {
+                      const deletedIdsStr = localStorage.getItem('trindade_deleted_order_ids');
+                      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+                      if (!deletedIds.includes(deletedId)) {
+                        deletedIds.push(deletedId);
+                        localStorage.setItem('trindade_deleted_order_ids', JSON.stringify(deletedIds));
+                      }
+                    }
+                    deleteOrderFromFirestore(deletedId).catch((err) => console.error('Erro ao excluir pedido do Firestore:', err));
+                  }
+                  setOrders((prev) => prev.filter((o) => o.id !== deletedId));
                   setOrderToDelete(null);
                 }}
                 className="px-4 py-2.5 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 transition-colors shadow-xs cursor-pointer w-full flex items-center justify-center gap-1.5"
