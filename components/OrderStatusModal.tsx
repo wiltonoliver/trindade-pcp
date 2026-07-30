@@ -48,6 +48,10 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
   if (!isOpen || !order) return null;
 
+  const userRole = currentUser?.role?.toLowerCase() || '';
+  const isVendas = userRole.includes('venda') || userRole.includes('lojista') || userRole.includes('representante');
+  const isReadOnly = isVendas || currentUser?.permissions?.canEditProduction === false;
+
   const handleStatusChange = (status: ExecutionStatus | 'retornado_aguardando') => {
     setSelectedStatus(status);
     if (status === 'retornado_aguardando') {
@@ -203,8 +207,21 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
             </div>
           </div>
 
-          {/* Manager Action Selection */}
-          <div className="space-y-3">
+          {/* Read Only Notice for Vendas */}
+          {isReadOnly && (
+            <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl text-amber-900 text-xs flex items-center gap-3 font-medium shadow-2xs">
+              <span className="material-symbols-outlined text-amber-600 text-xl shrink-0">lock</span>
+              <div>
+                <p className="font-bold text-amber-950">Apenas Leitura ({currentUser?.role || 'VENDAS'})</p>
+                <p className="text-amber-800 text-[11px] mt-0.5">Seu perfil possui permissão de consulta e não pode alterar o status ou registrar relatos nesta OP.</p>
+              </div>
+            </div>
+          )}
+
+          {!isReadOnly && (
+            <>
+              {/* Manager Action Selection */}
+              <div className="space-y-3">
             <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider">
               1. Selecione o Novo Status do Pedido / OP
             </label>
@@ -413,6 +430,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               </div>
             </div>
           )}
+            </>
+          )}
 
           {/* History Timeline of previous motives & status changes */}
           <div className="space-y-3 pt-2">
@@ -492,21 +511,33 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
         {/* Modal Footer */}
         <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
-          >
-            <span className="material-symbols-outlined text-[18px]">save</span>
-            <span>Salvar Relato &amp; Atualizar Status</span>
-          </button>
+          {isReadOnly ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+            >
+              <span>Fechar Visualização</span>
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-[18px]">save</span>
+                <span>Salvar Relato &amp; Atualizar Status</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

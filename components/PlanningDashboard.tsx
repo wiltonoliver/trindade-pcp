@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator } from '@/types/factory';
+import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile } from '@/types/factory';
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore } from '@/lib/firestoreSync';
@@ -13,6 +13,7 @@ interface PlanningDashboardProps {
   searchQuery: string;
   onNavigateToOrderEntry: () => void;
   onOpenDevModal?: () => void;
+  currentUser?: UserProfile | null;
 }
 
 export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
@@ -22,12 +23,17 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   searchQuery,
   onNavigateToOrderEntry,
   onOpenDevModal,
+  currentUser,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'mes' | 'semana'>('mes');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<OrderItem | null>(null);
+
+  const userRole = currentUser?.role?.toLowerCase() || '';
+  const isVendasRole = userRole.includes('venda') || userRole.includes('lojista') || userRole.includes('representante');
+  const isReadOnly = isVendasRole || currentUser?.permissions?.canEditProduction === false;
 
   // Operator assignment modal state
   const [selectedOrderForOperator, setSelectedOrderForOperator] = useState<OrderItem | null>(null);
@@ -36,6 +42,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const [selectedOrderForStatusModal, setSelectedOrderForStatusModal] = useState<OrderItem | null>(null);
 
   const handleAssignOperator = (orderId: string, operator: AssemblyOperator | null) => {
+    if (isReadOnly) return;
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.id === orderId) {
@@ -189,16 +196,19 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
+    if (isReadOnly) return;
     setDraggedOrderId(id);
     e.dataTransfer.setData('text/plain', id);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (isReadOnly) return;
     e.preventDefault();
   };
 
   const handleDrop = (e: React.DragEvent, targetCol: KanbanColumnId) => {
     e.preventDefault();
+    if (isReadOnly) return;
     const id = draggedOrderId || e.dataTransfer.getData('text/plain');
     if (!id) return;
 
@@ -223,6 +233,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   };
 
   const handleQuickMove = (id: string, targetCol: KanbanColumnId) => {
+    if (isReadOnly) return;
     const matchedCol = columnsConfig.find((c) => c.id === targetCol);
     const dateToAssign = matchedCol?.defaultDateStr || '';
 
@@ -243,6 +254,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   };
 
   const handleUpdateDate = (id: string, dateStr: string) => {
+    if (isReadOnly) return;
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.id === id) {
@@ -261,6 +273,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
     const matchedCol = columnsConfig.find((c) => c.id === newColumn);
     const initialDate = matchedCol?.defaultDateStr || '';
 
@@ -331,15 +344,32 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
             </button>
           </div>
 
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
-          >
-            <span className="material-symbols-outlined text-[18px]">add</span>
-            <span>Novo Pedido</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              <span>Novo Pedido</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Read Only Notice for Vendas or users without editing rights */}
+      {isReadOnly && (
+        <div className="bg-amber-50/90 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs font-medium flex items-center gap-3 shadow-2xs">
+          <div className="p-1.5 bg-amber-100 rounded-xl text-amber-700 shrink-0">
+            <span className="material-symbols-outlined text-lg">lock</span>
+          </div>
+          <div>
+            <p className="font-bold text-amber-950">Modo de Apenas Leitura (Cargo: {currentUser?.role || 'Vendas'})</p>
+            <p className="text-amber-800 text-[11px] mt-0.5">
+              Usuários do setor de Vendas possuem permissão para visualizar e consultar o progresso das OPs, mas não podem arrastar cards, alterar etapas, mudar datas ou atribuir montadores no Kanban/Lista.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* View Mode Switching: Kanban vs List View */}
       {viewMode === 'kanban' ? (
@@ -371,16 +401,18 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                       {colOrders.length < 10 ? `0${colOrders.length}` : colOrders.length}
                     </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      setNewColumn(col.id);
-                      setIsAddModalOpen(true);
-                    }}
-                    className="material-symbols-outlined text-slate-300 hover:text-blue-600 transition-colors text-[18px] cursor-pointer shrink-0"
-                    title="Adicionar à coluna"
-                  >
-                    add_circle
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => {
+                        setNewColumn(col.id);
+                        setIsAddModalOpen(true);
+                      }}
+                      className="material-symbols-outlined text-slate-300 hover:text-blue-600 transition-colors text-[18px] cursor-pointer shrink-0"
+                      title="Adicionar à coluna"
+                    >
+                      add_circle
+                    </button>
+                  )}
                 </div>
 
                 {/* Kanban Droppable Column Container */}
@@ -394,39 +426,43 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   {colOrders.length === 0 ? (
                     <div className="p-4 rounded-2xl border border-dashed border-slate-200 bg-white/60 flex flex-col items-center justify-center text-center text-slate-400 min-h-[120px]">
                       <span className="material-symbols-outlined text-[28px] mb-1 opacity-50">
-                        add_circle
+                        inventory_2
                       </span>
-                      <p className="text-[11px] font-medium">Arraste para agendar</p>
+                      <p className="text-[11px] font-medium">{isReadOnly ? 'Nenhum pedido nesta etapa' : 'Arraste para agendar'}</p>
                     </div>
                   ) : (
                     colOrders.map((ord, idx) => (
                       <div
                         key={ord.id ? `${ord.id}-${idx}` : `ord-${idx}`}
-                        draggable
+                        draggable={!isReadOnly}
                         onDragStart={(e) => handleDragStart(e, ord.id)}
-                        className={`bg-white p-3.5 rounded-2xl border shadow-2xs hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative ${
+                        className={`bg-white p-3.5 rounded-2xl border shadow-2xs hover:shadow-md transition-all ${
+                          isReadOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+                        } group relative ${
                           ord.column === 'hoje'
                             ? 'border-blue-200 shadow-2xs'
                             : 'border-slate-100'
                         }`}
                       >
                         {/* Card Actions (Delete & Drag Handle) */}
-                        <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 z-10">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOrderToDelete(ord);
-                            }}
-                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                            title="Excluir pedido"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">delete</span>
-                          </button>
-                          <span className="material-symbols-outlined text-slate-300 text-[16px]">
-                            drag_indicator
-                          </span>
-                        </div>
+                        {!isReadOnly && (
+                          <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 z-10">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOrderToDelete(ord);
+                              }}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                              title="Excluir pedido"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">delete</span>
+                            </button>
+                            <span className="material-symbols-outlined text-slate-300 text-[16px]">
+                              drag_indicator
+                            </span>
+                          </div>
+                        )}
 
                         {/* Store Header */}
                         <div className="flex items-start gap-2.5 mb-2.5">
@@ -488,7 +524,16 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
                         {/* Assigned Operator / Montador Badge */}
                         <div className="mb-2.5">
-                          {ord.assignedOperatorName ? (
+                          {isReadOnly ? (
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-semibold w-full">
+                              <span className="material-symbols-outlined text-[13px] text-slate-500 shrink-0">engineering</span>
+                              <span className="truncate">
+                                {ord.assignedOperatorName
+                                  ? (ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName)
+                                  : 'Sem montador'}
+                              </span>
+                            </div>
+                          ) : ord.assignedOperatorName ? (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -538,6 +583,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                             </span>
                             <input
                               type="text"
+                              readOnly={isReadOnly}
+                              disabled={isReadOnly}
                               value={ord.column === 'nao_planejado' && (!ord.productionDate || ord.productionDate === 'Aguardando Data') ? 'Aguardando Data' : (ord.productionDate || '')}
                               onChange={(e) => handleUpdateDate(ord.id, e.target.value)}
                               placeholder="Aguardando Data"
@@ -548,17 +595,23 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                           {/* Quick move column selector */}
                           <div className="flex items-center justify-between pt-0.5 text-[10px] text-slate-400 font-medium">
                             <span>Coluna:</span>
-                            <select
-                              value={ord.column}
-                              onChange={(e) => handleQuickMove(ord.id, e.target.value as KanbanColumnId)}
-                              className="bg-white border border-slate-200 text-slate-700 text-[10px] font-semibold rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[125px] truncate"
-                            >
-                              {columnsConfig.map((c) => (
-                                <option key={c.id} value={c.id} suppressHydrationWarning>
-                                  {c.title}
-                                </option>
-                              ))}
-                            </select>
+                            {isReadOnly ? (
+                              <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[10px] max-w-[125px] truncate">
+                                {columnsConfig.find((c) => c.id === ord.column)?.title || ord.column}
+                              </span>
+                            ) : (
+                              <select
+                                value={ord.column}
+                                onChange={(e) => handleQuickMove(ord.id, e.target.value as KanbanColumnId)}
+                                className="bg-white border border-slate-200 text-slate-700 text-[10px] font-semibold rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[125px] truncate"
+                              >
+                                {columnsConfig.map((c) => (
+                                  <option key={c.id} value={c.id} suppressHydrationWarning>
+                                    {c.title}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -630,16 +683,18 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      setNewColumn(col.id);
-                      setIsAddModalOpen(true);
-                    }}
-                    className="px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
-                  >
-                    <span className="material-symbols-outlined text-[16px] text-blue-600">add</span>
-                    <span>Adicionar Pedido</span>
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => {
+                        setNewColumn(col.id);
+                        setIsAddModalOpen(true);
+                      }}
+                      className="px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+                    >
+                      <span className="material-symbols-outlined text-[16px] text-blue-600">add</span>
+                      <span>Adicionar Pedido</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Section Table */}
@@ -667,9 +722,11 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                               inbox
                             </span>
                             <p className="font-semibold text-slate-600 text-xs">Nenhum pedido nesta etapa</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                              Clique em &quot;+ Adicionar Pedido&quot; para inserir itens nesta lista.
-                            </p>
+                            {!isReadOnly && (
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                Clique em &quot;+ Adicionar Pedido&quot; para inserir itens nesta lista.
+                              </p>
+                            )}
                           </td>
                         </tr>
                       ) : (
@@ -701,7 +758,12 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                               {ord.quantity}
                             </td>
                             <td className="px-5 py-4">
-                              {ord.assignedOperatorName ? (
+                              {isReadOnly ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold">
+                                  <span className="material-symbols-outlined text-[14px] text-slate-500">engineering</span>
+                                  <span>{ord.assignedOperatorName ? (ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName) : 'Não designado'}</span>
+                                </span>
+                              ) : ord.assignedOperatorName ? (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -761,6 +823,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                 </span>
                                 <input
                                   type="text"
+                                  readOnly={isReadOnly}
+                                  disabled={isReadOnly}
                                   value={ord.column === 'nao_planejado' && (!ord.productionDate || ord.productionDate === 'Aguardando Data') ? 'Aguardando Data' : (ord.productionDate || '')}
                                   onChange={(e) => handleUpdateDate(ord.id, e.target.value)}
                                   placeholder="Aguardando Data"
@@ -769,17 +833,23 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                               </div>
                             </td>
                             <td className="px-5 py-4">
-                              <select
-                                value={ord.column}
-                                onChange={(e) => handleQuickMove(ord.id, e.target.value as KanbanColumnId)}
-                                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[160px] truncate"
-                              >
-                                {columnsConfig.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.title}
-                                  </option>
-                                ))}
-                              </select>
+                              {isReadOnly ? (
+                                <span className="inline-block px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold max-w-[160px] truncate">
+                                  {columnsConfig.find(c => c.id === ord.column)?.title || ord.column}
+                                </span>
+                              ) : (
+                                <select
+                                  value={ord.column}
+                                  onChange={(e) => handleQuickMove(ord.id, e.target.value as KanbanColumnId)}
+                                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[160px] truncate"
+                                >
+                                  {columnsConfig.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.title}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
                             </td>
                             <td className="px-5 py-4 text-right">
                               <div className="flex items-center justify-end gap-1">
@@ -791,14 +861,16 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                 >
                                   <span className="material-symbols-outlined text-[18px]">edit_note</span>
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setOrderToDelete(ord)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                                  title="Excluir pedido"
-                                >
-                                  <span className="material-symbols-outlined text-[18px]">delete</span>
-                                </button>
+                                {!isReadOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setOrderToDelete(ord)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Excluir pedido"
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1156,7 +1228,9 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         order={selectedOrderForStatusModal}
         isOpen={!!selectedOrderForStatusModal}
         onClose={() => setSelectedOrderForStatusModal(null)}
+        currentUser={currentUser}
         onUpdateOrder={(updatedOrder) => {
+          if (isReadOnly) return;
           setOrders((prev) =>
             prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
           );
