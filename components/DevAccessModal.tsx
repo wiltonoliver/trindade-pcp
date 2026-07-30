@@ -155,7 +155,6 @@ export const DevAccessModal: React.FC<DevAccessModalProps> = ({
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-300 flex items-center justify-between">
                 <span>Senha do DEV *</span>
-                <span className="text-[10px] text-slate-500 font-mono">Padrão: dev123</span>
               </label>
               <div className="relative">
                 <input
@@ -164,7 +163,7 @@ export const DevAccessModal: React.FC<DevAccessModalProps> = ({
                   autoFocus
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Digite dev123..."
+                  placeholder="Digite a senha de acesso..."
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono font-bold text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 pr-10"
                 />
                 <button

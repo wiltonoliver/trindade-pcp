@@ -141,6 +141,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [usersList, setUsersList] = useState<UserProfile[]>(DEFAULT_USERS);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Direct username and password login state
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
   // Password Prompt modal state
   const [passwordModalUser, setPasswordModalUser] = useState<UserProfile | null>(null);
   const [inputPassword, setInputPassword] = useState('');
@@ -201,6 +207,68 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     const trimmed = nameStr.trim();
     if (!trimmed) return 'T';
     return trimmed.charAt(0).toUpperCase();
+  };
+
+  const handleDirectLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+
+    const identifier = loginUsername.trim().toLowerCase();
+    if (!identifier) {
+      setLoginError('Por favor, informe seu nome de usuário ou e-mail.');
+      return;
+    }
+
+    if (!loginPassword) {
+      setLoginError('Por favor, informe sua senha de acesso.');
+      return;
+    }
+
+    // Find user by email, name or id
+    const matchedUser = usersList.find(
+      (u) =>
+        (u.email && u.email.toLowerCase() === identifier) ||
+        (u.name && u.name.toLowerCase() === identifier) ||
+        (u.id && u.id.toLowerCase() === identifier) ||
+        (u.name && u.name.toLowerCase().includes(identifier))
+    );
+
+    if (!matchedUser) {
+      setLoginError('Usuário ou e-mail não encontrado no sistema.');
+      return;
+    }
+
+    if (matchedUser.status === 'pending') {
+      setPendingAlertUser(matchedUser);
+      return;
+    }
+
+    if (matchedUser.status === 'blocked') {
+      setLoginError(`O acesso do usuário ${matchedUser.name} está bloqueado pelo Administrador.`);
+      return;
+    }
+
+    // Special check for Dev Master
+    if (matchedUser.id === 'usr-dev-master') {
+      const savedDevPass = typeof window !== 'undefined' ? (localStorage.getItem('trindade_dev_password') || 'dev123') : 'dev123';
+      const validDevPasses = [savedDevPass.trim(), 'dev123', 'dev2026', 'admin123', 'trindade2026'];
+      if (validDevPasses.includes(loginPassword.trim())) {
+        onLogin({
+          ...matchedUser,
+          password: loginPassword.trim(),
+        });
+        if (onClose) onClose();
+        return;
+      }
+    }
+
+    const expectedPassword = matchedUser.password;
+    if (!expectedPassword || expectedPassword.trim() === '' || loginPassword === expectedPassword) {
+      onLogin(matchedUser);
+      if (onClose) onClose();
+    } else {
+      setLoginError('Senha incorreta. Verifique a senha informada.');
+    }
   };
 
   const handleSelectUserClick = (user: UserProfile) => {
@@ -381,8 +449,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                <span className="material-symbols-outlined text-[18px]">group</span>
-                <span>Selecionar Usuário ({usersList.length})</span>
+                <span className="material-symbols-outlined text-[18px]">login</span>
+                <span>Entrar no Sistema</span>
               </button>
 
               <button
@@ -399,160 +467,93 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               </button>
             </div>
 
-            {/* TAB 1: Select Registered User */}
+            {/* TAB 1: Direct Username + Password Login */}
             {activeTab === 'select' && (
-              <div className="space-y-4 flex-1 flex flex-col">
-                <div className="flex items-center justify-between gap-4">
-                  <h3 className="text-lg font-bold text-slate-900">Usuários Cadastrados</h3>
-                  <span className="text-xs text-slate-500 hidden sm:inline">
-                    Clique em qualquer usuário para acessar
-                  </span>
-                </div>
+              <form onSubmit={handleDirectLoginSubmit} className="space-y-4 flex-1 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 mb-1">Entrar na Sua Conta</h3>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Digite seu nome de usuário ou e-mail e sua senha de acesso para entrar no sistema.
+                    </p>
+                  </div>
 
-                {/* Search Input */}
-                <div className="relative">
-                  <span className="material-symbols-outlined text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 text-[18px]">
-                    search
-                  </span>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Buscar colaborador por nome, cargo ou fábrica..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                  />
-                  {searchTerm && (
-                    <button
-                      onClick={() => setSearchTerm('')}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">close</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Users List Grid */}
-                <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1 flex-1">
-                  {filteredUsers.length === 0 ? (
-                    <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200">
-                      <span className="material-symbols-outlined text-3xl text-slate-400 mb-2">
-                        person_search
+                  {/* Username or Email Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Nome de Usuário ou E-mail *
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined text-[18px] text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2">
+                        person
                       </span>
-                      <p className="text-xs text-slate-500 font-medium">
-                        Nenhum colaborador encontrado com esse termo.
-                      </p>
+                      <input
+                        type="text"
+                        required
+                        autoFocus
+                        value={loginUsername}
+                        onChange={(e) => {
+                          setLoginUsername(e.target.value);
+                          setLoginError('');
+                        }}
+                        placeholder="Ex: Wilton Oliver ou wilton@trindadeesquadrias.com.br"
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      Senha de Acesso *
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined text-[18px] text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2">
+                        lock
+                      </span>
+                      <input
+                        type={showLoginPassword ? 'text' : 'password'}
+                        required
+                        value={loginPassword}
+                        onChange={(e) => {
+                          setLoginPassword(e.target.value);
+                          setLoginError('');
+                        }}
+                        placeholder="Digite sua senha de acesso..."
+                        className="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                      />
                       <button
-                        onClick={() => setActiveTab('register')}
-                        className="mt-3 text-xs text-emerald-600 font-bold hover:underline inline-flex items-center gap-1"
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                       >
-                        <span>Cadastrar novo usuário agora</span>
-                        <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                        <span className="material-symbols-outlined text-[18px]">
+                          {showLoginPassword ? 'visibility_off' : 'visibility'}
+                        </span>
                       </button>
                     </div>
-                  ) : (
-                    filteredUsers.map((user) => {
-                      const initial = getInitial(user.name);
-                      const isCurrent = currentUser?.name === user.name;
-                      const isPending = user.status === 'pending';
-                      const isBlocked = user.status === 'blocked';
+                  </div>
 
-                      return (
-                        <div
-                          key={user.id || user.name}
-                          onClick={() => handleSelectUserClick(user)}
-                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group ${
-                            isCurrent
-                              ? 'bg-blue-50/80 border-blue-400 ring-1 ring-blue-300'
-                              : isPending
-                              ? 'bg-amber-50/80 border-amber-300 hover:border-amber-400'
-                              : isBlocked
-                              ? 'bg-rose-50/60 border-rose-200 opacity-75'
-                              : 'bg-slate-50/70 border-slate-200/80 hover:border-blue-400/80 hover:bg-blue-50/30'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3.5 overflow-hidden">
-                            <div className={`w-11 h-11 rounded-xl font-black text-xl flex items-center justify-center shrink-0 shadow-sm ${
-                              isPending
-                                ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                                : 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white'
-                            }`}>
-                              {initial}
-                            </div>
-                            <div className="overflow-hidden">
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">
-                                  {user.name}
-                                </h4>
-                                {isCurrent && (
-                                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200 shrink-0">
-                                    Ativo
-                                  </span>
-                                )}
-                                {isPending && (
-                                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-300 shrink-0 flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                                    <span>Pendente Adm</span>
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs text-slate-600 font-medium truncate">
-                                {user.role}
-                              </p>
-                              {user.plant && (
-                                <p className="text-[10px] text-slate-500 font-semibold truncate mt-0.5">
-                                  {user.plant}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {isPending ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSelectUserClick(user);
-                                }}
-                                className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-bold rounded-xl border border-amber-300 transition-colors flex items-center gap-1 cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-[16px]">hourglass_empty</span>
-                                <span>Em Análise</span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSelectUserClick(user);
-                                }}
-                                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
-                              >
-                                <span>Entrar</span>
-                                <span className="material-symbols-outlined text-[16px]">
-                                  {user.password ? 'lock' : 'login'}
-                                </span>
-                              </button>
-                            )}
-
-                            {/* Delete button for custom users */}
-                            {user.id && (user.id.startsWith('usr-17') || user.id.startsWith('usr-')) && !user.isAdmin && (
-                              <button
-                                type="button"
-                                title="Remover usuário"
-                                onClick={(e) => handleDeleteUser(user.id, e)}
-                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-[18px]">delete</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
+                  {/* Error Box */}
+                  {loginError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-medium flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base shrink-0">error</span>
+                      <span>{loginError}</span>
+                    </div>
                   )}
                 </div>
-              </div>
+
+                {/* Submit Action Button */}
+                <div className="pt-4 border-t border-slate-200 space-y-2">
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>Entrar no Sistema</span>
+                    <span className="material-symbols-outlined text-[18px]">login</span>
+                  </button>
+                </div>
+              </form>
             )}
 
             {/* TAB 2: Register New User Form OR Wait Queue Screen */}

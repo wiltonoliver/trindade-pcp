@@ -816,9 +816,9 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
       {/* Modal: Manual Add Order */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl border border-slate-200 animate-scaleUp">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl border border-slate-200 animate-scaleUp max-h-[90vh] overflow-y-auto my-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-6 shrink-0">
               <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2">
                 <span className="material-symbols-outlined text-blue-600">add_box</span>
                 <span>Novo Pedido de Produção</span>
@@ -976,10 +976,10 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
       {/* Assign Operator / Montador Modal */}
       {isOperatorModalOpen && selectedOrderForOperator && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl border border-slate-200 animate-scaleUp space-y-5">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl border border-slate-200 animate-scaleUp flex flex-col max-h-[85vh] sm:max-h-[90vh] my-auto overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+            <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-[24px]">engineering</span>
@@ -1001,124 +1001,127 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
               </button>
             </div>
 
-            {/* Selected Order Summary Card */}
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-blue-600">{selectedOrderForOperator.orderId}</span>
-                <span className="text-slate-500 font-medium">{selectedOrderForOperator.store}</span>
-              </div>
-              <p className="font-semibold text-sm text-slate-900">{selectedOrderForOperator.itemDescription}</p>
-              <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/50">
-                <span>Qtd: <strong>{selectedOrderForOperator.quantity} peças</strong></span>
-                <span>Data Programada: <strong>{selectedOrderForOperator.productionDate || 'Aguardando data'}</strong></span>
-              </div>
-            </div>
-
-            {/* Current Assignment Badge or Notice */}
-            {selectedOrderForOperator.assignedOperatorName ? (
-              <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[18px] text-emerald-600">check_circle</span>
-                  <div>
-                    <span className="font-bold block text-[11px]">Montador Atribuído:</span>
-                    <span className="font-semibold">{selectedOrderForOperator.assignedOperatorCode ? `${selectedOrderForOperator.assignedOperatorCode} - ` : ''}{selectedOrderForOperator.assignedOperatorName}</span>
-                  </div>
+            {/* Scrollable Content Container */}
+            <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1 my-1">
+              {/* Selected Order Summary Card */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-blue-600">{selectedOrderForOperator.orderId}</span>
+                  <span className="text-slate-500 font-medium">{selectedOrderForOperator.store}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleAssignOperator(selectedOrderForOperator.id, null)}
-                  className="px-2.5 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-[11px] font-bold rounded-xl transition-colors cursor-pointer shadow-2xs"
-                >
-                  Remover
-                </button>
-              </div>
-            ) : (
-              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 text-xs text-amber-800 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">info</span>
-                <span>Nenhum operador atribuído a esta ordem de produção ainda.</span>
-              </div>
-            )}
-
-            {/* Operators Search & Selection List */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700">Selecione o Montador Apto:</label>
-                <span className="text-[11px] text-slate-400">
-                  {operators.filter((op) => op.status === 'Ativo').length} montadores ativos
-                </span>
+                <p className="font-semibold text-sm text-slate-900">{selectedOrderForOperator.itemDescription}</p>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/50">
+                  <span>Qtd: <strong>{selectedOrderForOperator.quantity} peças</strong></span>
+                  <span>Data Programada: <strong>{selectedOrderForOperator.productionDate || 'Aguardando data'}</strong></span>
+                </div>
               </div>
 
-              {/* Search filter */}
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">
-                  search
-                </span>
-                <input
-                  type="text"
-                  value={operatorSearchQuery}
-                  onChange={(e) => setOperatorSearchQuery(e.target.value)}
-                  placeholder="Buscar por nome, código (OP-101) ou especialidade..."
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              {/* Current Assignment Badge or Notice */}
+              {selectedOrderForOperator.assignedOperatorName ? (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-emerald-600">check_circle</span>
+                    <div>
+                      <span className="font-bold block text-[11px]">Montador Atribuído:</span>
+                      <span className="font-semibold">{selectedOrderForOperator.assignedOperatorCode ? `${selectedOrderForOperator.assignedOperatorCode} - ` : ''}{selectedOrderForOperator.assignedOperatorName}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAssignOperator(selectedOrderForOperator.id, null)}
+                    className="px-2.5 py-1 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-[11px] font-bold rounded-xl transition-colors cursor-pointer shadow-2xs"
+                  >
+                    Remover
+                  </button>
+                </div>
+              ) : (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200/80 text-xs text-amber-800 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">info</span>
+                  <span>Nenhum operador atribuído a esta ordem de produção ainda.</span>
+                </div>
+              )}
 
-              {/* Operators list */}
-              <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
-                {operators
-                  .filter((op) => op.status === 'Ativo')
-                  .filter((op) => {
-                    if (!operatorSearchQuery) return true;
-                    const q = operatorSearchQuery.toLowerCase();
-                    return (
-                      op.name.toLowerCase().includes(q) ||
-                      op.code.toLowerCase().includes(q) ||
-                      op.specialty.toLowerCase().includes(q) ||
-                      op.role.toLowerCase().includes(q)
-                    );
-                  })
-                  .map((op) => {
-                    const isSelected = selectedOrderForOperator.assignedOperatorId === op.id;
-                    return (
-                      <div
-                        key={op.id}
-                        onClick={() => handleAssignOperator(selectedOrderForOperator.id, op)}
-                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                          isSelected
-                            ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500 shadow-2xs'
-                            : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                            isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
-                          }`}>
-                            {op.code}
-                          </div>
-                          <div className="truncate">
-                            <h4 className="font-bold text-xs text-slate-900 truncate">{op.name}</h4>
-                            <p className="text-[10px] text-slate-500 truncate">{op.specialty}</p>
-                            <span className="text-[9px] text-slate-400 block">{op.shift || '1º Turno'} • {op.plant || 'Matriz'}</span>
-                          </div>
-                        </div>
+              {/* Operators Search & Selection List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700">Selecione o Montador Apto:</label>
+                  <span className="text-[11px] text-slate-400">
+                    {operators.filter((op) => op.status === 'Ativo').length} montadores ativos
+                  </span>
+                </div>
 
-                        <button
-                          type="button"
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0 ${
+                {/* Search filter */}
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    value={operatorSearchQuery}
+                    onChange={(e) => setOperatorSearchQuery(e.target.value)}
+                    placeholder="Buscar por nome, código (OP-101) ou especialidade..."
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                {/* Operators list */}
+                <div className="max-h-48 sm:max-h-56 overflow-y-auto space-y-2 pr-1">
+                  {operators
+                    .filter((op) => op.status === 'Ativo')
+                    .filter((op) => {
+                      if (!operatorSearchQuery) return true;
+                      const q = operatorSearchQuery.toLowerCase();
+                      return (
+                        op.name.toLowerCase().includes(q) ||
+                        op.code.toLowerCase().includes(q) ||
+                        op.specialty.toLowerCase().includes(q) ||
+                        op.role.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((op) => {
+                      const isSelected = selectedOrderForOperator.assignedOperatorId === op.id;
+                      return (
+                        <div
+                          key={op.id}
+                          onClick={() => handleAssignOperator(selectedOrderForOperator.id, op)}
+                          className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             isSelected
-                              ? 'bg-blue-600 text-white shadow-2xs'
-                              : 'bg-slate-100 text-slate-700 hover:bg-blue-600 hover:text-white'
+                              ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500 shadow-2xs'
+                              : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-slate-50'
                           }`}
                         >
-                          {isSelected ? 'Selecionado' : 'Designar'}
-                        </button>
-                      </div>
-                    );
-                  })}
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                              isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {op.code}
+                            </div>
+                            <div className="truncate">
+                              <h4 className="font-bold text-xs text-slate-900 truncate">{op.name}</h4>
+                              <p className="text-[10px] text-slate-500 truncate">{op.specialty}</p>
+                              <span className="text-[9px] text-slate-400 block">{op.shift || '1º Turno'} • {op.plant || 'Matriz'}</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors shrink-0 ${
+                              isSelected
+                                ? 'bg-blue-600 text-white shadow-2xs'
+                                : 'bg-slate-100 text-slate-700 hover:bg-blue-600 hover:text-white'
+                            }`}
+                          >
+                            {isSelected ? 'Selecionado' : 'Designar'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
+            <div className="pt-3 border-t border-slate-100 flex justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => {
