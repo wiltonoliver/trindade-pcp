@@ -1,0 +1,39 @@
+{
+  "entities": {
+    "orders": {
+      "title": "Pedidos de Produção",
+      "description": "Pedidos industriais da fábrica",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "clientName": { "type": "string" },
+        "storeId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "status": { "type": "string" },
+        "deliveryDate": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "stores": {
+      "title": "Lojas / Clientes",
+      "description": "Lojas e clientes parceiros",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "city": { "type": "string" }
+      }
+    },
+    "users": {
+      "title": "Usuários do Sistema",
+      "description": "Usuários e Colaboradores da plataforma",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    }
+  }
+}
