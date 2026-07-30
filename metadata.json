@@ -1,5 +1,5 @@
 {
-  "name": "FactoryOps",
+  "name": "Trindade PCP",
   "description": "Production Command Center - Dashboard de Planejamento, Entrada de Pedidos com IA, Produtividade Diária e Re-planejamento.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

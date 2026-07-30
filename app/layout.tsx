@@ -2,8 +2,8 @@ import type {Metadata} from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FactoryOps - Production Command',
-  description: 'Sistema de Gestão e Planejamento de Produção Industrial',
+  title: 'Trindade PCP',
+  description: 'Sistema de Gestão e Planejamento de Produção Industrial - Trindade Esquadrias',
   icons: {
     icon: '/favicon.svg',
     shortcut: '/favicon.svg',
