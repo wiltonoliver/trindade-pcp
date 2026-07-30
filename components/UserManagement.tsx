@@ -255,15 +255,23 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   // New User Form State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('Operador Industrial');
+  const [newRole, setNewRole] = useState('DIRETORIA');
   const [newEmail, setNewEmail] = useState('');
   const [newPlant, setNewPlant] = useState('Planta A - Matriz');
   const [newStatus, setNewStatus] = useState<UserStatus>('approved');
   const [newPermissions, setNewPermissions] = useState<UserPermissions>({
     canEditProduction: true,
-    canCreateOrder: false,
-    canManageStores: false,
-    canManageUsers: false,
+    canCreateOrder: true,
+    canManageStores: true,
+    canManageUsers: true,
+    canAccessOrderEntry: true,
+    canAccessDashboard: true,
+    canAccessProductivity: true,
+    canAccessStatistics: true,
+    canAccessStores: true,
+    canAccessUsers: true,
+    canAccessReports: true,
+    canAccessHistory: true,
   });
 
   // Operator Management state / handlers
@@ -565,15 +573,23 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     
     // Reset form
     setNewName('');
-    setNewRole('Operador Industrial');
+    setNewRole('DIRETORIA');
     setNewEmail('');
     setNewPlant('Planta A - Matriz');
     setNewStatus('approved');
     setNewPermissions({
       canEditProduction: true,
-      canCreateOrder: false,
-      canManageStores: false,
-      canManageUsers: false,
+      canCreateOrder: true,
+      canManageStores: true,
+      canManageUsers: true,
+      canAccessOrderEntry: true,
+      canAccessDashboard: true,
+      canAccessProductivity: true,
+      canAccessStatistics: true,
+      canAccessStores: true,
+      canAccessUsers: true,
+      canAccessReports: true,
+      canAccessHistory: true,
     });
   };
 
@@ -1085,6 +1101,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           <div
                             className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
                               perms.canAccessProductivity !== false ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Page: Estatísticas & Montadores */}
+                      <div
+                        onClick={() => user.id && handleTogglePermission(user.id, 'canAccessStatistics')}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          perms.canAccessStatistics !== false
+                            ? 'bg-blue-50/80 border-blue-200 text-blue-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="material-symbols-outlined text-[18px]">analytics</span>
+                          <span className="text-xs font-bold truncate">Estatísticas & Montadores</span>
+                        </div>
+                        <div
+                          className={`w-8 h-4 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                            perms.canAccessStatistics !== false ? 'bg-blue-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                              perms.canAccessStatistics !== false ? 'translate-x-4' : 'translate-x-0'
                             }`}
                           />
                         </div>
@@ -1751,21 +1793,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                     onChange={(e) => {
                       const role = e.target.value;
                       setNewRole(role);
-                      if (role === 'Lojista / Representante Comercial') {
-                        setNewPermissions({
-                          canEditProduction: false,
-                          canCreateOrder: false,
-                          canManageStores: false,
-                          canManageUsers: false,
-                          canAccessOrderEntry: false,
-                          canAccessDashboard: true,
-                          canAccessProductivity: true,
-                          canAccessStores: false,
-                          canAccessUsers: false,
-                          canAccessReports: false,
-                          canAccessHistory: false,
-                        });
-                      } else if (role === 'Gerente de Operações') {
+                      if (role === 'DIRETORIA' || role === 'GESTÃO INDUSTRIAL' || role === 'GERENTE DE OPERAÇÕES') {
                         setNewPermissions({
                           canEditProduction: true,
                           canCreateOrder: true,
@@ -1774,8 +1802,39 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           canAccessOrderEntry: true,
                           canAccessDashboard: true,
                           canAccessProductivity: true,
+                          canAccessStatistics: true,
                           canAccessStores: true,
                           canAccessUsers: true,
+                          canAccessReports: true,
+                          canAccessHistory: true,
+                        });
+                      } else if (role === 'VENDAS' || role === 'Lojista / Representante Comercial') {
+                        setNewPermissions({
+                          canEditProduction: false,
+                          canCreateOrder: true,
+                          canManageStores: false,
+                          canManageUsers: false,
+                          canAccessOrderEntry: true,
+                          canAccessDashboard: true,
+                          canAccessProductivity: true,
+                          canAccessStatistics: false,
+                          canAccessStores: false,
+                          canAccessUsers: false,
+                          canAccessReports: false,
+                          canAccessHistory: false,
+                        });
+                      } else if (role === 'OPERADOR INDUSTRIAL' || role === 'SUPERVISOR DE PRODUÇÃO' || role === 'ANALISTA DE PCP') {
+                        setNewPermissions({
+                          canEditProduction: true,
+                          canCreateOrder: true,
+                          canManageStores: false,
+                          canManageUsers: false,
+                          canAccessOrderEntry: true,
+                          canAccessDashboard: true,
+                          canAccessProductivity: true,
+                          canAccessStatistics: true,
+                          canAccessStores: false,
+                          canAccessUsers: false,
                           canAccessReports: true,
                           canAccessHistory: true,
                         });
@@ -1785,8 +1844,12 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   >
                     <option value="DIRETORIA">DIRETORIA</option>
                     <option value="GESTÃO INDUSTRIAL">GESTÃO INDUSTRIAL</option>
+                    <option value="GERENTE DE OPERAÇÕES">GERENTE DE OPERAÇÕES</option>
+                    <option value="SUPERVISOR DE PRODUÇÃO">SUPERVISOR DE PRODUÇÃO</option>
+                    <option value="ANALISTA DE PCP">ANALISTA DE PCP</option>
                     <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
                     <option value="VENDAS">VENDAS</option>
+                    <option value="OPERADOR INDUSTRIAL">OPERADOR INDUSTRIAL</option>
                   </select>
                 </div>
 
@@ -1847,6 +1910,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className="rounded text-emerald-600 focus:ring-emerald-500"
                     />
                     <span>Produtividade</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canAccessStatistics !== false}
+                      onChange={(e) => setNewPermissions({ ...newPermissions, canAccessStatistics: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>Estatísticas & Montadores</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
@@ -2052,6 +2125,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className="rounded text-amber-600 focus:ring-amber-500"
                     />
                     <span>Produtividade</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={approvePermissions.canAccessStatistics !== false}
+                      onChange={(e) => setApprovePermissions({ ...approvePermissions, canAccessStatistics: e.target.checked })}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Estatísticas & Montadores</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">

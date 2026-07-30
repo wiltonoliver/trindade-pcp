@@ -208,7 +208,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   // Registration Form State
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('GESTÃO INDUSTRIAL');
+  const [newRole, setNewRole] = useState('DIRETORIA');
   const [customRole, setCustomRole] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPlant, setNewPlant] = useState('Planta A - Matriz');
@@ -703,8 +703,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                           >
                             <option value="DIRETORIA">DIRETORIA</option>
                             <option value="GESTÃO INDUSTRIAL">GESTÃO INDUSTRIAL</option>
+                            <option value="GERENTE DE OPERAÇÕES">GERENTE DE OPERAÇÕES</option>
+                            <option value="SUPERVISOR DE PRODUÇÃO">SUPERVISOR DE PRODUÇÃO</option>
+                            <option value="ANALISTA DE PCP">ANALISTA DE PCP</option>
                             <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
                             <option value="VENDAS">VENDAS</option>
+                            <option value="OPERADOR INDUSTRIAL">OPERADOR INDUSTRIAL</option>
+                            <option value="Outro">Outro...</option>
                           </select>
                         </div>
                       </div>
