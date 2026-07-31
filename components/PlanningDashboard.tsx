@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile } from '@/types/factory';
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { OrderStatusModal } from './OrderStatusModal';
-import { deleteOrderFromFirestore } from '@/lib/firestoreSync';
+import { deleteOrderFromFirestore, saveOrderToFirestore } from '@/lib/firestoreSync';
 
 interface PlanningDashboardProps {
   orders: OrderItem[];
@@ -176,8 +176,10 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     },
   ];
 
-  // Filter orders by search query
-  const filteredOrders = orders.filter((ord) => {
+  // Filter active orders (excluding completed ones) and filter by search query
+  const activeOrders = orders.filter((ord) => ord.executionStatus !== 'concluido' && ord.progress !== 100);
+
+  const filteredOrders = activeOrders.filter((ord) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -304,6 +306,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     setIsAddModalOpen(false);
   };
 
+  const pendingUrgencyOrders = orders.filter((o) => o.urgencyRequest?.status === 'pending');
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-[1440px] mx-auto space-y-6 sm:space-y-8 animate-fadeIn">
       {/* Header Section */}
@@ -356,20 +360,36 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         </div>
       </div>
 
-      {/* Read Only Notice for Vendas or users without editing rights */}
-      {isReadOnly && (
-        <div className="bg-amber-50/90 border border-amber-200 text-amber-900 px-4 py-3 rounded-2xl text-xs font-medium flex items-center gap-3 shadow-2xs">
-          <div className="p-1.5 bg-amber-100 rounded-xl text-amber-700 shrink-0">
-            <span className="material-symbols-outlined text-lg">lock</span>
+      {/* Pending Urgency Requests Top Alert Banner */}
+      {pendingUrgencyOrders.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-950 px-4 py-3 rounded-2xl text-xs font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center shrink-0 shadow-xs">
+              <span className="material-symbols-outlined text-lg animate-pulse">bolt</span>
+            </div>
+            <div>
+              <p className="font-bold text-amber-950 text-xs">
+                {pendingUrgencyOrders.length} {pendingUrgencyOrders.length === 1 ? 'Solicitação de Urgência Pendente' : 'Solicitações de Urgência Pendentes'}
+              </p>
+              <p className="text-amber-800 text-[11px] font-medium mt-0.5">
+                {isReadOnly 
+                  ? 'Sua solicitação de urgência foi enviada aos gestores e está aguardando avaliação.'
+                  : 'O setor de Vendas solicitou urgência em pedido(s). Clique abaixo para avaliar as justificativas.'}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="font-bold text-amber-950">Modo de Apenas Leitura (Cargo: {currentUser?.role || 'Vendas'})</p>
-            <p className="text-amber-800 text-[11px] mt-0.5">
-              Usuários do setor de Vendas possuem permissão para visualizar e consultar o progresso das OPs, mas não podem arrastar cards, alterar etapas, mudar datas ou atribuir montadores no Kanban/Lista.
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedOrderForStatusModal(pendingUrgencyOrders[0])}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-xs flex items-center gap-1 self-end sm:self-auto"
+          >
+            <span>Analisar Pedido</span>
+            <span className="material-symbols-outlined text-sm">arrow_forward</span>
+          </button>
         </div>
       )}
+
+
 
       {/* View Mode Switching: Kanban vs List View */}
       {viewMode === 'kanban' ? (
@@ -489,13 +509,56 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                         </div>
 
                         {/* Items & Progress */}
-                        <div className="space-y-2 mb-2.5">
+                        <div className="space-y-2">
                           <div className="flex items-center gap-1.5 text-slate-600">
                             <span className="material-symbols-outlined text-[14px] text-slate-400 shrink-0">
                               inventory_2
                             </span>
                             <span className="text-[11px] font-medium truncate">{ord.itemDescription}</span>
                           </div>
+
+                          {/* Badges for Priority and Urgency Request Status */}
+                          {(ord.priority === 'ALTA PRIORIDADE' || ord.urgencyRequest) && (
+                            <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                              {ord.priority === 'ALTA PRIORIDADE' && (
+                                <span className="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded text-[9px] font-bold inline-block">
+                                  🔥 ALTA PRIORIDADE
+                                </span>
+                              )}
+                              {ord.urgencyRequest?.status === 'pending' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOrderForStatusModal(ord);
+                                  }}
+                                  className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[9px] font-bold animate-pulse inline-flex items-center gap-1 cursor-pointer hover:bg-amber-200 transition-colors"
+                                  title="Solicitação de Urgência Pendente - Clique para avaliar"
+                                >
+                                  <span className="material-symbols-outlined text-[11px] text-amber-600">bolt</span>
+                                  <span>⚡ Urgência Solicitada</span>
+                                </button>
+                              )}
+                              {ord.urgencyRequest?.status === 'approved' && (
+                                <span
+                                  className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1"
+                                  title={`Urgência Aprovada por ${ord.urgencyRequest.evaluatedBy}`}
+                                >
+                                  <span className="material-symbols-outlined text-[11px] text-emerald-600">verified</span>
+                                  <span>⚡ Urgência Aceita</span>
+                                </span>
+                              )}
+                              {ord.urgencyRequest?.status === 'rejected' && (
+                                <span
+                                  className="bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1"
+                                  title={`Urgência Recusada por ${ord.urgencyRequest.evaluatedBy}: ${ord.urgencyRequest.evaluatorNote}`}
+                                >
+                                  <span className="material-symbols-outlined text-[11px] text-rose-600">cancel</span>
+                                  <span>❌ Urgência Recusada</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
 
                           {ord.column === 'hoje' ? (
                             <div className="space-y-1">
@@ -520,99 +583,6 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                               />
                             </div>
                           )}
-                        </div>
-
-                        {/* Assigned Operator / Montador Badge */}
-                        <div className="mb-2.5">
-                          {isReadOnly ? (
-                            <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-semibold w-full">
-                              <span className="material-symbols-outlined text-[13px] text-slate-500 shrink-0">engineering</span>
-                              <span className="truncate">
-                                {ord.assignedOperatorName
-                                  ? (ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName)
-                                  : 'Sem montador'}
-                              </span>
-                            </div>
-                          ) : ord.assignedOperatorName ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedOrderForOperator(ord);
-                                setIsOperatorModalOpen(true);
-                              }}
-                              className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200/90 text-[10px] font-semibold hover:bg-emerald-100 transition-colors cursor-pointer w-full text-left"
-                              title="Clique para alterar ou remover montador"
-                            >
-                              <span className="material-symbols-outlined text-[13px] text-emerald-600 shrink-0">engineering</span>
-                              <span className="truncate">
-                                {ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName}
-                              </span>
-                              <span className="material-symbols-outlined text-[11px] text-emerald-500 ml-auto shrink-0">edit</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedOrderForOperator(ord);
-                                setIsOperatorModalOpen(true);
-                              }}
-                              className="flex items-center justify-center gap-1 px-2 py-1 rounded-xl border border-dashed border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 text-[10px] font-medium transition-colors cursor-pointer w-full"
-                              title="Designar qual operador/montador irá montar esta esquadria"
-                            >
-                              <span className="material-symbols-outlined text-[13px] text-blue-500">person_add</span>
-                              <span>Designar Montador</span>
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Card Footer: Date or Move selector */}
-                        <div className="pt-2.5 border-t border-slate-100 flex flex-col gap-2">
-                          {ord.priority === 'ALTA PRIORIDADE' && (
-                            <div>
-                              <span className="bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded text-[9px] font-bold inline-block">
-                                ALTA PRIORIDADE
-                              </span>
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-1.5 px-2 py-1 border border-slate-200 rounded-xl bg-slate-50 text-[11px]">
-                            <span className={`material-symbols-outlined text-[14px] shrink-0 ${ord.column === 'nao_planejado' ? 'text-amber-600' : 'text-blue-600'}`}>
-                              calendar_today
-                            </span>
-                            <input
-                              type="text"
-                              readOnly={isReadOnly}
-                              disabled={isReadOnly}
-                              value={ord.column === 'nao_planejado' && (!ord.productionDate || ord.productionDate === 'Aguardando Data') ? 'Aguardando Data' : (ord.productionDate || '')}
-                              onChange={(e) => handleUpdateDate(ord.id, e.target.value)}
-                              placeholder="Aguardando Data"
-                              className="bg-transparent border-none p-0 text-[11px] font-medium focus:ring-0 w-full text-slate-900 placeholder:text-slate-400"
-                            />
-                          </div>
-
-                          {/* Quick move column selector */}
-                          <div className="flex items-center justify-between pt-0.5 text-[10px] text-slate-400 font-medium">
-                            <span>Coluna:</span>
-                            {isReadOnly ? (
-                              <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded text-[10px] max-w-[125px] truncate">
-                                {columnsConfig.find((c) => c.id === ord.column)?.title || ord.column}
-                              </span>
-                            ) : (
-                              <select
-                                value={ord.column}
-                                onChange={(e) => handleQuickMove(ord.id, e.target.value as KanbanColumnId)}
-                                className="bg-white border border-slate-200 text-slate-700 text-[10px] font-semibold rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[125px] truncate"
-                              >
-                                {columnsConfig.map((c) => (
-                                  <option key={c.id} value={c.id} suppressHydrationWarning>
-                                    {c.title}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                          </div>
                         </div>
                       </div>
                     ))
@@ -792,16 +762,42 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                               )}
                             </td>
                             <td className="px-5 py-4">
-                              {ord.priority === 'ALTA PRIORIDADE' ? (
-                                <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                  ALTA
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-medium">
-                                  NORMAL
-                                </span>
-                              )}
+                              <div className="flex flex-col gap-1 items-start">
+                                {ord.priority === 'ALTA PRIORIDADE' ? (
+                                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                    ALTA
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-medium">
+                                    NORMAL
+                                  </span>
+                                )}
+
+                                {ord.urgencyRequest?.status === 'pending' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedOrderForStatusModal(ord)}
+                                    className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[10px] font-bold animate-pulse cursor-pointer hover:bg-amber-200 transition-colors"
+                                    title="Urgência Solicitada pelo Vendedor - Clique para avaliar"
+                                  >
+                                    <span>⚡ Urgência Solicitada</span>
+                                  </button>
+                                )}
+                                {ord.urgencyRequest?.status === 'approved' && (
+                                  <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded text-[10px] font-bold">
+                                    <span>⚡ Urgência Aceita</span>
+                                  </span>
+                                )}
+                                {ord.urgencyRequest?.status === 'rejected' && (
+                                  <span
+                                    className="inline-flex items-center gap-1 bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded text-[10px] font-bold"
+                                    title={`Recusada por ${ord.urgencyRequest.evaluatedBy}: ${ord.urgencyRequest.evaluatorNote}`}
+                                  >
+                                    <span>❌ Urgência Recusada</span>
+                                  </span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-5 py-4 w-36">
                               <div className="space-y-1">
@@ -1230,10 +1226,11 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         onClose={() => setSelectedOrderForStatusModal(null)}
         currentUser={currentUser}
         onUpdateOrder={(updatedOrder) => {
-          if (isReadOnly) return;
           setOrders((prev) =>
             prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
           );
+          setSelectedOrderForStatusModal(updatedOrder);
+          saveOrderToFirestore(updatedOrder);
         }}
       />
     </div>

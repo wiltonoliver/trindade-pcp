@@ -9,6 +9,7 @@ interface SidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   pendingCount?: number;
   pendingUsersCount?: number;
+  completedCount?: number;
   currentUser?: UserProfile | null;
   onOpenLogin?: () => void;
   isOpenMobile?: boolean;
@@ -20,6 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   pendingCount = 0,
   pendingUsersCount = 0,
+  completedCount = 0,
   currentUser,
   onOpenLogin,
   isOpenMobile = false,
@@ -43,6 +45,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: 'dashboard',
       badge: null,
       permissionKey: 'canAccessDashboard' as keyof UserPermissions,
+    },
+    {
+      id: 'completed' as ActiveTab,
+      label: 'Pedidos Concluídos',
+      icon: 'verified',
+      badge: completedCount > 0 ? completedCount : null,
+      permissionKey: 'canAccessCompleted' as keyof UserPermissions,
     },
     {
       id: 'productivity' as ActiveTab,

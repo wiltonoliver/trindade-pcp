@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
-import { OrderItem, ExecutionStatus, OrderStatusHistoryLog, UserProfile } from '@/types/factory';
+import React, { useState, useMemo } from 'react';
+import { OrderItem, ExecutionStatus, OrderStatusHistoryLog, UserProfile, UrgencyRequest } from '@/types/factory';
 import { sanitizeUnit } from '@/lib/utils';
+import { saveOrderToFirestore } from '@/lib/firestoreSync';
 
 interface OrderStatusModalProps {
   order: OrderItem | null;
@@ -46,11 +47,140 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   const [organizationScore, setOrganizationScore] = useState<number>(order?.organizationScore || 5);
   const [disciplineScore, setDisciplineScore] = useState<number>(order?.disciplineScore || 5);
 
+  // Urgency Request Local States
+  const [urgencyReasonText, setUrgencyReasonText] = useState<string>('');
+  const [showUrgencyForm, setShowUrgencyForm] = useState<boolean>(false);
+  const [managerRejectionNote, setManagerRejectionNote] = useState<string>('');
+  const [showRejectionInput, setShowRejectionInput] = useState<boolean>(false);
+
+  // Deduplicate history logs to remove repeating identical entries
+  const historyList = order?.statusHistory;
+  const cleanStatusHistory = useMemo(() => {
+    if (!historyList || historyList.length === 0) return [];
+
+    const uniqueLogs: OrderStatusHistoryLog[] = [];
+    const seenKeys = new Set<string>();
+
+    for (const log of historyList) {
+      const key = `${log.timestamp?.trim() || ''}-${log.author?.trim() || ''}-${log.status}-${log.reason?.trim() || ''}-${log.note?.trim() || ''}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        uniqueLogs.push(log);
+      }
+    }
+    return uniqueLogs;
+  }, [historyList]);
+
   if (!isOpen || !order) return null;
 
   const userRole = currentUser?.role?.toLowerCase() || '';
   const isVendas = userRole.includes('venda') || userRole.includes('lojista') || userRole.includes('representante');
-  const isReadOnly = isVendas || currentUser?.permissions?.canEditProduction === false;
+  const isCompleted = order?.executionStatus === 'concluido' || order?.progress === 100;
+  const isReadOnly = isVendas || currentUser?.permissions?.canEditProduction === false || isCompleted;
+
+  const handleRequestUrgency = () => {
+    if (!order || !urgencyReasonText.trim()) return;
+    const nowStr = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const authorName = currentUser?.name || currentUser?.role || 'Vendedor/Lojista';
+
+    const newUrgencyRequest: UrgencyRequest = {
+      status: 'pending',
+      requestedBy: authorName,
+      requestReason: urgencyReasonText.trim(),
+      requestedAt: nowStr,
+    };
+
+    const newLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: nowStr,
+      author: authorName,
+      status: order.executionStatus,
+      reason: 'Solicitação de Urgência',
+      note: `Justificativa do Vendedor: "${urgencyReasonText.trim()}"`,
+      actionType: 'status_update',
+    };
+
+    const updatedOrder: OrderItem = {
+      ...order,
+      urgencyRequest: newUrgencyRequest,
+      statusHistory: [newLog, ...(order.statusHistory || [])],
+    };
+
+    onUpdateOrder(updatedOrder);
+    saveOrderToFirestore(updatedOrder);
+    setShowUrgencyForm(false);
+    setUrgencyReasonText('');
+  };
+
+  const handleApproveUrgency = () => {
+    if (!order || !order.urgencyRequest) return;
+    const nowStr = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const managerName = currentUser?.name || 'Gestão de Operações';
+
+    const updatedUrgency: UrgencyRequest = {
+      ...order.urgencyRequest,
+      status: 'approved',
+      evaluatedBy: managerName,
+      evaluatedAt: nowStr,
+      evaluatorNote: 'Urgência aceita e confirmada pela gestão.',
+    };
+
+    const newLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: nowStr,
+      author: managerName,
+      status: order.executionStatus,
+      reason: 'Urgência Aprovada pela Gestão',
+      note: `Solicitação de ${order.urgencyRequest.requestedBy} APROVADA. Pedido promovido para ALTA PRIORIDADE. (Justificativa: "${order.urgencyRequest.requestReason}")`,
+      actionType: 'status_update',
+    };
+
+    const updatedOrder: OrderItem = {
+      ...order,
+      priority: 'ALTA PRIORIDADE',
+      urgencyRequest: updatedUrgency,
+      statusHistory: [newLog, ...(order.statusHistory || [])],
+    };
+
+    onUpdateOrder(updatedOrder);
+    saveOrderToFirestore(updatedOrder);
+  };
+
+  const handleRejectUrgency = () => {
+    if (!order || !order.urgencyRequest) return;
+    const nowStr = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const managerName = currentUser?.name || 'Gestão de Operações';
+    const rejectionReason = managerRejectionNote.trim() || 'Solicitação de urgência recusada pela gestão.';
+
+    const updatedUrgency: UrgencyRequest = {
+      ...order.urgencyRequest,
+      status: 'rejected',
+      evaluatedBy: managerName,
+      evaluatedAt: nowStr,
+      evaluatorNote: rejectionReason,
+    };
+
+    const newLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: nowStr,
+      author: managerName,
+      status: order.executionStatus,
+      reason: 'Urgência Recusada pela Gestão',
+      note: `Solicitação de ${order.urgencyRequest.requestedBy} RECUSADA. Motivo da recusa: "${rejectionReason}" (Justificativa original do vendedor: "${order.urgencyRequest.requestReason}")`,
+      actionType: 'status_update',
+    };
+
+    const updatedOrder: OrderItem = {
+      ...order,
+      urgencyRequest: updatedUrgency,
+      statusHistory: [newLog, ...(order.statusHistory || [])],
+    };
+
+    onUpdateOrder(updatedOrder);
+    saveOrderToFirestore(updatedOrder);
+    setShowRejectionInput(false);
+    setManagerRejectionNote('');
+  };
 
   const handleStatusChange = (status: ExecutionStatus | 'retornado_aguardando') => {
     setSelectedStatus(status);
@@ -207,16 +337,209 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
             </div>
           </div>
 
-          {/* Read Only Notice for Vendas */}
-          {isReadOnly && (
-            <div className="p-3.5 bg-amber-50 border border-amber-200/80 rounded-2xl text-amber-900 text-xs flex items-center gap-3 font-medium shadow-2xs">
-              <span className="material-symbols-outlined text-amber-600 text-xl shrink-0">lock</span>
-              <div>
-                <p className="font-bold text-amber-950">Apenas Leitura ({currentUser?.role || 'VENDAS'})</p>
-                <p className="text-amber-800 text-[11px] mt-0.5">Seu perfil possui permissão de consulta e não pode alterar o status ou registrar relatos nesta OP.</p>
+          {/* Urgency Request & Manager Evaluation Section */}
+          {(order.urgencyRequest || (isVendas && !isCompleted)) && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-amber-500 font-black text-xl">bolt</span>
+                  <span className="font-bold text-xs uppercase tracking-wider text-slate-900">Solicitação de Urgência</span>
+                </div>
+                {order.urgencyRequest?.status === 'pending' && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">schedule</span>
+                    Pendente de Análise
+                  </span>
+                )}
+                {order.urgencyRequest?.status === 'approved' && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">verified</span>
+                    Aceita / Alta Prioridade
+                  </span>
+                )}
+                {order.urgencyRequest?.status === 'rejected' && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">cancel</span>
+                    Recusada
+                  </span>
+                )}
               </div>
+
+              {order.urgencyRequest ? (
+                <div className="space-y-2.5">
+                  {order.urgencyRequest.status === 'pending' && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-950 space-y-2">
+                      <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                        <span className="material-symbols-outlined text-amber-600 text-base">person</span>
+                        <span>Solicitado por {order.urgencyRequest.requestedBy}</span>
+                        <span className="text-[10px] text-amber-700 font-normal">({order.urgencyRequest.requestedAt})</span>
+                      </p>
+                      <div className="bg-white/90 p-2.5 rounded-lg border border-amber-200 text-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block mb-0.5">Motivo da Urgência:</span>
+                        <p className="text-xs text-slate-800 font-medium italic">&quot;{order.urgencyRequest.requestReason}&quot;</p>
+                      </div>
+
+                      {/* Manager Evaluation Panel */}
+                      {!isReadOnly ? (
+                        <div className="pt-2 border-t border-amber-200/80 space-y-2">
+                          <span className="text-[11px] font-bold text-amber-950 block">Avaliação do Gestor:</span>
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleApproveUrgency}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                            >
+                              <span className="material-symbols-outlined text-base">check_circle</span>
+                              <span>Aceitar Urgência (Alta Prioridade)</span>
+                            </button>
+
+                            {!showRejectionInput ? (
+                              <button
+                                type="button"
+                                onClick={() => setShowRejectionInput(true)}
+                                className="px-4 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-rose-300"
+                              >
+                                <span className="material-symbols-outlined text-base">cancel</span>
+                                <span>Recusar Urgência</span>
+                              </button>
+                            ) : (
+                              <div className="w-full space-y-2 pt-1 bg-white p-3 rounded-xl border border-rose-200">
+                                <label className="block text-xs font-bold text-rose-900">Motivo da Recusa (para o vendedor):</label>
+                                <input
+                                  type="text"
+                                  value={managerRejectionNote}
+                                  onChange={(e) => setManagerRejectionNote(e.target.value)}
+                                  placeholder="Informe o motivo da recusa (ex: Fábrica em capacidade máxima)..."
+                                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 font-medium text-slate-900"
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowRejectionInput(false)}
+                                    className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg text-xs font-bold cursor-pointer"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleRejectUrgency}
+                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-xs"
+                                  >
+                                    Confirmar Recusa
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-amber-800 font-medium pt-1 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">schedule</span>
+                          <span>A solicitação foi enviada aos gestores e aguarda avaliação.</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {order.urgencyRequest.status === 'approved' && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 text-xs text-emerald-950 space-y-1.5">
+                      <p className="font-bold flex items-center gap-1.5 text-emerald-900">
+                        <span className="material-symbols-outlined text-base text-emerald-600">verified</span>
+                        <span>Solicitação de Urgência ACEITA pela Gestão!</span>
+                      </p>
+                      <p className="text-[11px] text-emerald-800">
+                        Confirmado por <strong>{order.urgencyRequest.evaluatedBy}</strong> em {order.urgencyRequest.evaluatedAt}.
+                      </p>
+                      <div className="bg-white/90 p-2.5 rounded-lg border border-emerald-200/80 text-slate-800 mt-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase block">Motivo original do vendedor:</span>
+                        <p className="text-xs text-slate-800 italic">&quot;{order.urgencyRequest.requestReason}&quot;</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {order.urgencyRequest.status === 'rejected' && (
+                    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs text-rose-950 space-y-2">
+                      <p className="font-bold flex items-center gap-1.5 text-rose-900">
+                        <span className="material-symbols-outlined text-base text-rose-600">error</span>
+                        <span>Solicitação de Urgência RECUSADA</span>
+                      </p>
+                      <p className="text-[11px] text-rose-800">
+                        Avaliado por <strong>{order.urgencyRequest.evaluatedBy}</strong> em {order.urgencyRequest.evaluatedAt}.
+                      </p>
+                      <div className="bg-white p-2.5 rounded-lg border border-rose-200 text-slate-800 space-y-1">
+                        <span className="text-[10px] font-bold text-rose-800 uppercase block">Motivo da Recusa (Gestor):</span>
+                        <p className="text-xs text-slate-900 font-bold italic">&quot;{order.urgencyRequest.evaluatorNote}&quot;</p>
+                      </div>
+
+                      {isVendas && !isCompleted && !showUrgencyForm && (
+                        <button
+                          type="button"
+                          onClick={() => setShowUrgencyForm(true)}
+                          className="text-[11px] text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer pt-1 block"
+                        >
+                          + Solicitar Urgência Novamente (Nova Justificativa)
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  {!showUrgencyForm && isVendas && !isCompleted && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-500 font-medium">Nenhuma solicitação de urgência registrada.</p>
+                      <button
+                        type="button"
+                        onClick={() => setShowUrgencyForm(true)}
+                        className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-base">bolt</span>
+                        <span>Solicitar Urgência ao Gestor</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {showUrgencyForm && (
+                <div className="bg-white border border-amber-300 p-3.5 rounded-xl space-y-2.5 animate-fadeIn">
+                  <label className="block text-xs font-bold text-amber-950">
+                    Justificativa da Urgência (será enviada para avaliação dos gestores):
+                  </label>
+                  <textarea
+                    value={urgencyReasonText}
+                    onChange={(e) => setUrgencyReasonText(e.target.value)}
+                    rows={3}
+                    placeholder="Descreva o motivo da urgência (ex: Cliente solicita entrega antecipada para inauguração da loja no dia X)..."
+                    className="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:bg-white text-slate-900 font-medium"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUrgencyForm(false);
+                        setUrgencyReasonText('');
+                      }}
+                      className="px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!urgencyReasonText.trim()}
+                      onClick={handleRequestUrgency}
+                      className="px-4 py-1.5 text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg shadow-xs cursor-pointer flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-sm">send</span>
+                      <span>Enviar aos Gestores</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+
 
           {!isReadOnly && (
             <>
@@ -437,73 +760,122 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
           <div className="space-y-3 pt-2">
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[16px] text-blue-600">history</span>
-              <span>Histórico de Relatos e Motivos Gravados ({order.statusHistory?.length || 0})</span>
+              <span>Histórico de Relatos e Motivos Gravados ({cleanStatusHistory.length})</span>
             </h4>
 
-            {!order.statusHistory || order.statusHistory.length === 0 ? (
+            {cleanStatusHistory.length === 0 ? (
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center text-xs text-slate-500">
                 Nenhuma ocorrência ou alteração registrada anteriormente para este pedido.
               </div>
             ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                {order.statusHistory.map((log, idx) => (
-                  <div key={log.id ? `${log.id}-${idx}` : `log-${idx}`} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                      <span className="flex items-center gap-1 text-slate-700">
-                        <span className="material-symbols-outlined text-[14px] text-blue-600">person</span>
-                        {log.author}
-                      </span>
-                      <span>{log.timestamp}</span>
-                    </div>
+              <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
+                {cleanStatusHistory.map((log, idx) => {
+                  const statusLabel =
+                    log.status === 'concluido'
+                      ? 'Concluído'
+                      : log.status === 'retornado_aguardando'
+                      ? 'Retornado p/ Aguardando Data'
+                      : log.status === 'nao_produzido'
+                      ? 'Com Problema / Não Concluído'
+                      : log.status === 'em_andamento'
+                      ? 'Em Andamento'
+                      : 'Não Iniciado';
 
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-slate-200 text-slate-800">
-                        {log.status === 'concluido'
-                          ? 'Concluído'
-                          : log.status === 'retornado_aguardando'
-                          ? 'Retornado p/ Aguardando Data'
-                          : 'Com Problema / Não Concluído'}
-                      </span>
-                      {log.previousDate && (
-                        <span className="text-[10px] text-slate-500 font-medium">
-                          Data anterior: {log.previousDate}
+                  const reasonText = (log.reason || '').trim();
+                  const noteText = (log.note || '').trim();
+
+                  // Avoid repeating reason if it matches default texts or status label or is duplicated in note
+                  const isRedundantReason =
+                    !reasonText ||
+                    reasonText === 'Sem motivo especificado' ||
+                    reasonText.toLowerCase() === statusLabel.toLowerCase() ||
+                    reasonText.toLowerCase() === 'concluído' ||
+                    reasonText.toLowerCase() === 'concluido' ||
+                    reasonText === noteText;
+
+                  return (
+                    <div key={log.id ? `${log.id}-${idx}` : `log-${idx}`} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                        <span className="flex items-center gap-1 text-slate-700">
+                          <span className="material-symbols-outlined text-[14px] text-blue-600">person</span>
+                          {log.author}
                         </span>
+                        <span>{log.timestamp}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {log.reason?.includes('Urgência') || log.reason?.includes('urgência') ? (
+                          log.reason.includes('Recusada') ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px]">cancel</span>
+                              Urgência Recusada
+                            </span>
+                          ) : log.reason.includes('Aprovada') || log.reason.includes('Aceita') ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px]">verified</span>
+                              Urgência Aprovada
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px]">bolt</span>
+                              Solicitação de Urgência
+                            </span>
+                          )
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase flex items-center gap-1 border ${
+                            log.status === 'concluido'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : log.status === 'nao_produzido'
+                              ? 'bg-rose-100 text-rose-800 border-rose-300'
+                              : 'bg-slate-200 text-slate-800 border-slate-300'
+                          }`}>
+                            <span className="material-symbols-outlined text-[12px]">
+                              {log.status === 'concluido' ? 'check_circle' : log.status === 'nao_produzido' ? 'error' : 'info'}
+                            </span>
+                            {statusLabel}
+                          </span>
+                        )}
+                        {log.previousDate && log.previousDate !== 'Aguardando Data' && (
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            (Data anterior: {log.previousDate})
+                          </span>
+                        )}
+                      </div>
+
+                      {!isRedundantReason && !reasonText.includes('Urgência') && (
+                        <div className="font-bold text-amber-900 bg-amber-50 px-2 py-1 rounded-md border border-amber-200/70 text-[11px]">
+                          Motivo: {reasonText}
+                        </div>
+                      )}
+
+                      {(log.cleanlinessScore || log.organizationScore || log.disciplineScore) && (
+                        <div className="flex flex-wrap gap-2 pt-0.5 text-[10px] font-bold text-slate-600">
+                          {log.cleanlinessScore && (
+                            <span className="bg-cyan-50 text-cyan-800 px-1.5 py-0.5 rounded border border-cyan-200">
+                              Limpeza: {log.cleanlinessScore}/5 ★
+                            </span>
+                          )}
+                          {log.organizationScore && (
+                            <span className="bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded border border-indigo-200">
+                              Organização: {log.organizationScore}/5 ★
+                            </span>
+                          )}
+                          {log.disciplineScore && (
+                            <span className="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
+                              Disciplina: {log.disciplineScore}/5 ★
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {noteText && (
+                        <p className="text-slate-600 text-[11px] bg-white p-2 rounded-lg border border-slate-200 italic">
+                          &quot;{noteText}&quot;
+                        </p>
                       )}
                     </div>
-
-                    {log.reason && log.reason !== 'Sem motivo especificado' && (
-                      <div className="font-bold text-amber-800 text-xs">
-                        {log.reason}
-                      </div>
-                    )}
-
-                    {(log.cleanlinessScore || log.organizationScore || log.disciplineScore) && (
-                      <div className="flex flex-wrap gap-2 pt-1 text-[10px] font-bold text-slate-600">
-                        {log.cleanlinessScore && (
-                          <span className="bg-cyan-50 text-cyan-800 px-1.5 py-0.5 rounded border border-cyan-200">
-                            Limpeza: {log.cleanlinessScore}/5 ★
-                          </span>
-                        )}
-                        {log.organizationScore && (
-                          <span className="bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded border border-indigo-200">
-                            Organização: {log.organizationScore}/5 ★
-                          </span>
-                        )}
-                        {log.disciplineScore && (
-                          <span className="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
-                            Disciplina: {log.disciplineScore}/5 ★
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {log.note && (
-                      <p className="text-slate-600 text-[11px] bg-white p-2 rounded-lg border border-slate-200 italic">
-                        &quot;{log.note}&quot;
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

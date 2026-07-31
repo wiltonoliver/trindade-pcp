@@ -15,6 +15,7 @@ import { ReplanningHistory } from '@/components/ReplanningHistory';
 import { StoreManagement } from '@/components/StoreManagement';
 import { UserManagement } from '@/components/UserManagement';
 import { ReportsPage } from '@/components/ReportsPage';
+import { CompletedOrders } from '@/components/CompletedOrders';
 
 import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 import { NotificationsDrawer } from '@/components/NotificationsDrawer';
@@ -323,6 +324,8 @@ export default function FactoryOpsApp() {
         return p.canAccessDashboard !== false;
       case 'productivity':
         return p.canAccessProductivity !== false;
+      case 'completed':
+        return p.canAccessCompleted !== false;
       case 'stores':
         return p.canAccessStores !== false;
       case 'users':
@@ -397,6 +400,8 @@ export default function FactoryOpsApp() {
     }
   };
 
+  const completedCount = orders.filter((o) => o.executionStatus === 'concluido' || o.progress === 100).length;
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       {/* Persistent Sidebar */}
@@ -405,6 +410,7 @@ export default function FactoryOpsApp() {
         setActiveTab={setActiveTab}
         pendingCount={0}
         pendingUsersCount={pendingUsersCount}
+        completedCount={completedCount}
         currentUser={currentUser}
         onOpenLogin={() => setIsLoginOpen(true)}
         isOpenMobile={isMobileMenuOpen}
@@ -458,6 +464,15 @@ export default function FactoryOpsApp() {
             orders={orders}
             setOrders={setOrders}
             searchQuery={searchQuery}
+          />
+        )}
+
+        {activeTab === 'completed' && isTabAllowed('completed') && (
+          <CompletedOrders
+            orders={orders}
+            setOrders={setOrders}
+            searchQuery={searchQuery}
+            currentUser={currentUser}
           />
         )}
 

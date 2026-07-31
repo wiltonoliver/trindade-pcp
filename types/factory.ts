@@ -17,6 +17,16 @@ export interface AssemblyOperator {
   createdAt?: string;
 }
 
+export interface UrgencyRequest {
+  status: 'pending' | 'approved' | 'rejected';
+  requestedBy: string;
+  requestReason: string;
+  requestedAt: string;
+  evaluatedBy?: string;
+  evaluatedAt?: string;
+  evaluatorNote?: string;
+}
+
 export interface OrderStatusHistoryLog {
   id: string;
   timestamp: string;
@@ -55,6 +65,7 @@ export interface OrderItem {
   cleanlinessScore?: number;
   organizationScore?: number;
   disciplineScore?: number;
+  urgencyRequest?: UrgencyRequest;
 }
 
 export interface ProblemHistoryItem {
@@ -85,7 +96,7 @@ export interface Store {
   status: 'Ativa' | 'Inativa';
 }
 
-export type ActiveTab = 'dashboard' | 'order-entry' | 'productivity' | 'statistics' | 'history' | 'stores' | 'users' | 'reports';
+export type ActiveTab = 'dashboard' | 'order-entry' | 'productivity' | 'completed' | 'statistics' | 'history' | 'stores' | 'users' | 'reports';
 
 export type UserStatus = 'approved' | 'pending' | 'blocked';
 
@@ -97,6 +108,7 @@ export interface UserPermissions {
   canAccessOrderEntry?: boolean;
   canAccessDashboard?: boolean;
   canAccessProductivity?: boolean;
+  canAccessCompleted?: boolean;
   canAccessStatistics?: boolean;
   canAccessStores?: boolean;
   canAccessUsers?: boolean;
