@@ -161,7 +161,7 @@ export const DailyProductivity: React.FC<DailyProductivityProps> = ({
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Atrasos/Falhas
             </p>
-            <h4 className="text-3xl font-bold text-rose-600 mt-2">{errorCount}</h4>
+            <h4 className="text-3xl font-bold text-slate-700 mt-2">{errorCount}</h4>
             <p className="text-xs text-slate-400 mt-1 font-medium">Não produzidos</p>
           </div>
         </div>
@@ -279,10 +279,10 @@ export const DailyProductivity: React.FC<DailyProductivityProps> = ({
 
                           <button
                             onClick={() => handleSetStatus(ord.id, 'nao_produzido')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border cursor-pointer ${
                               isNao
-                                ? 'bg-rose-50 text-rose-700 border-rose-300 shadow-xs scale-105'
-                                : 'bg-white border-slate-200 text-slate-600 hover:bg-rose-50/50'
+                                ? 'bg-slate-100 text-slate-800 border-slate-300 shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                             }`}
                           >
                             Não Produzido

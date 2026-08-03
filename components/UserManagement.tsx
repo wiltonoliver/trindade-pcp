@@ -202,7 +202,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   };
 
   useEffect(() => {
-    loadUsersFromStorage();
+    queueMicrotask(() => loadUsersFromStorage());
 
     const unsub = subscribeUsers((firestoreUsers) => {
       const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;

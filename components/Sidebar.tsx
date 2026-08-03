@@ -162,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>{item.label}</span>
               </div>
               {item.badge !== null && (
-                <span className="bg-blue-500/20 text-blue-300 text-[11px] font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
+                <span className="bg-slate-800 text-slate-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-slate-700/60">
                   {item.badge}
                 </span>
               )}

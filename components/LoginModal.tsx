@@ -182,7 +182,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   React.useEffect(() => {
-    loadSavedUsers();
+    queueMicrotask(() => loadSavedUsers());
 
     const unsub = subscribeUsers((firestoreUsers) => {
       const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;

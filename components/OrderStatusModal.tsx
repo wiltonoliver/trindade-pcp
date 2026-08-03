@@ -358,8 +358,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                   </span>
                 )}
                 {order.urgencyRequest?.status === 'rejected' && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs">cancel</span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs text-slate-400">info</span>
                     Recusada
                   </span>
                 )}
@@ -397,20 +397,20 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setShowRejectionInput(true)}
-                                className="px-4 py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-rose-300"
+                                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-300"
                               >
-                                <span className="material-symbols-outlined text-base">cancel</span>
+                                <span className="material-symbols-outlined text-base text-slate-500">do_not_disturb_on</span>
                                 <span>Recusar Urgência</span>
                               </button>
                             ) : (
-                              <div className="w-full space-y-2 pt-1 bg-white p-3 rounded-xl border border-rose-200">
-                                <label className="block text-xs font-bold text-rose-900">Motivo da Recusa (para o vendedor):</label>
+                              <div className="w-full space-y-2 pt-1 bg-white p-3 rounded-xl border border-slate-200">
+                                <label className="block text-xs font-medium text-slate-800">Motivo da Recusa (para o vendedor):</label>
                                 <input
                                   type="text"
                                   value={managerRejectionNote}
                                   onChange={(e) => setManagerRejectionNote(e.target.value)}
                                   placeholder="Informe o motivo da recusa (ex: Fábrica em capacidade máxima)..."
-                                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 font-medium text-slate-900"
+                                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-slate-400 font-medium text-slate-900"
                                 />
                                 <div className="flex justify-end gap-2">
                                   <button
@@ -423,7 +423,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={handleRejectUrgency}
-                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold cursor-pointer shadow-xs"
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium cursor-pointer shadow-xs"
                                   >
                                     Confirmar Recusa
                                   </button>
@@ -458,17 +458,17 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                   )}
 
                   {order.urgencyRequest.status === 'rejected' && (
-                    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs text-rose-950 space-y-2">
-                      <p className="font-bold flex items-center gap-1.5 text-rose-900">
-                        <span className="material-symbols-outlined text-base text-rose-600">error</span>
-                        <span>Solicitação de Urgência RECUSADA</span>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs text-slate-800 space-y-2">
+                      <p className="font-semibold flex items-center gap-1.5 text-slate-800">
+                        <span className="material-symbols-outlined text-base text-slate-500">info</span>
+                        <span>Solicitação de Urgência Recusada</span>
                       </p>
-                      <p className="text-[11px] text-rose-800">
+                      <p className="text-[11px] text-slate-600">
                         Avaliado por <strong>{order.urgencyRequest.evaluatedBy}</strong> em {order.urgencyRequest.evaluatedAt}.
                       </p>
-                      <div className="bg-white p-2.5 rounded-lg border border-rose-200 text-slate-800 space-y-1">
-                        <span className="text-[10px] font-bold text-rose-800 uppercase block">Motivo da Recusa (Gestor):</span>
-                        <p className="text-xs text-slate-900 font-bold italic">&quot;{order.urgencyRequest.evaluatorNote}&quot;</p>
+                      <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-slate-800 space-y-1">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase block">Motivo da Recusa (Gestor):</span>
+                        <p className="text-xs text-slate-900 font-medium italic">&quot;{order.urgencyRequest.evaluatorNote}&quot;</p>
                       </div>
 
                       {isVendas && !isCompleted && !showUrgencyForm && (
@@ -577,13 +577,13 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                 onClick={() => handleStatusChange('nao_produzido')}
                 className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
                   selectedStatus === 'nao_produzido'
-                    ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20 text-rose-900'
+                    ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-500/10 text-amber-950'
                     : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
                 }`}
               >
                 <span
                   className={`material-symbols-outlined text-xl p-1.5 rounded-xl ${
-                    selectedStatus === 'nao_produzido' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-500'
+                    selectedStatus === 'nao_produzido' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
                   warning
@@ -806,31 +806,31 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                       <div className="flex items-center gap-2 flex-wrap">
                         {log.reason?.includes('Urgência') || log.reason?.includes('urgência') ? (
                           log.reason.includes('Recusada') ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px]">cancel</span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px] text-slate-400">info</span>
                               Urgência Recusada
                             </span>
                           ) : log.reason.includes('Aprovada') || log.reason.includes('Aceita') ? (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px]">verified</span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px] text-emerald-600">verified</span>
                               Urgência Aprovada
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px]">bolt</span>
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px] text-amber-600">bolt</span>
                               Solicitação de Urgência
                             </span>
                           )
                         ) : (
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase flex items-center gap-1 border ${
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 border ${
                             log.status === 'concluido'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : log.status === 'nao_produzido'
-                              ? 'bg-rose-100 text-rose-800 border-rose-300'
-                              : 'bg-slate-200 text-slate-800 border-slate-300'
+                              ? 'bg-slate-100 text-slate-700 border-slate-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
                           }`}>
                             <span className="material-symbols-outlined text-[12px]">
-                              {log.status === 'concluido' ? 'check_circle' : log.status === 'nao_produzido' ? 'error' : 'info'}
+                              {log.status === 'concluido' ? 'check_circle' : 'info'}
                             </span>
                             {statusLabel}
                           </span>

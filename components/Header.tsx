@@ -76,10 +76,10 @@ export const Header: React.FC<HeaderProps> = ({
         {pendingUsersCount > 0 && onNavigateToUsers && (
           <button
             onClick={onNavigateToUsers}
-            className="hidden xl:flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-800 rounded-full text-xs font-bold transition-all animate-pulse cursor-pointer shadow-xs shrink-0"
+            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 text-amber-800 rounded-lg text-xs font-medium transition-all cursor-pointer shrink-0"
             title="Acessar Gestão de Usuários para aprovação e criação de senha"
           >
-            <span className="material-symbols-outlined text-[16px] text-amber-600">person_add</span>
+            <span className="material-symbols-outlined text-[15px] text-amber-600">person_add</span>
             <span>{pendingUsersCount} {pendingUsersCount === 1 ? 'Solicitação' : 'Solicitações'}</span>
           </button>
         )}

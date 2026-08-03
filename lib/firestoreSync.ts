@@ -65,12 +65,40 @@ export const subscribeOperators = (onUpdate: (operators: AssemblyOperator[]) => 
 };
 
 /**
+ * Remove recursivamente todas as propriedades com valor `undefined`
+ * para evitar erros do Firestore ("Unsupported field value: undefined").
+ */
+const sanitizeForFirestore = <T>(obj: T): T => {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof obj === 'object' && obj.constructor === Object) {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+};
+
+/**
  * Salva ou atualiza um pedido no Firestore
  */
 export const saveOrderToFirestore = async (order: OrderItem) => {
   if (!order.id) return;
-  const docRef = doc(db, 'orders', order.id);
-  await setDoc(docRef, order, { merge: true });
+  try {
+    const docRef = doc(db, 'orders', order.id);
+    const cleanOrder = sanitizeForFirestore(order);
+    await setDoc(docRef, cleanOrder, { merge: true });
+  } catch (error) {
+    console.error('Erro ao salvar pedido no Firestore:', error);
+  }
 };
 
 /**
@@ -78,7 +106,11 @@ export const saveOrderToFirestore = async (order: OrderItem) => {
  */
 export const deleteOrderFromFirestore = async (orderId: string) => {
   if (!orderId) return;
-  await deleteDoc(doc(db, 'orders', orderId));
+  try {
+    await deleteDoc(doc(db, 'orders', orderId));
+  } catch (error) {
+    console.error('Erro ao remover pedido do Firestore:', error);
+  }
 };
 
 /**
@@ -86,7 +118,12 @@ export const deleteOrderFromFirestore = async (orderId: string) => {
  */
 export const saveStoreToFirestore = async (store: Store) => {
   if (!store.id) return;
-  await setDoc(doc(db, 'stores', store.id), store, { merge: true });
+  try {
+    const cleanStore = sanitizeForFirestore(store);
+    await setDoc(doc(db, 'stores', store.id), cleanStore, { merge: true });
+  } catch (error) {
+    console.error('Erro ao salvar loja no Firestore:', error);
+  }
 };
 
 /**
@@ -94,7 +131,11 @@ export const saveStoreToFirestore = async (store: Store) => {
  */
 export const deleteStoreFromFirestore = async (storeId: string) => {
   if (!storeId) return;
-  await deleteDoc(doc(db, 'stores', storeId));
+  try {
+    await deleteDoc(doc(db, 'stores', storeId));
+  } catch (error) {
+    console.error('Erro ao remover loja do Firestore:', error);
+  }
 };
 
 /**
@@ -102,7 +143,12 @@ export const deleteStoreFromFirestore = async (storeId: string) => {
  */
 export const saveOperatorToFirestore = async (operator: AssemblyOperator) => {
   if (!operator.id) return;
-  await setDoc(doc(db, 'operators', operator.id), operator, { merge: true });
+  try {
+    const cleanOperator = sanitizeForFirestore(operator);
+    await setDoc(doc(db, 'operators', operator.id), cleanOperator, { merge: true });
+  } catch (error) {
+    console.error('Erro ao salvar operador no Firestore:', error);
+  }
 };
 
 /**
@@ -110,7 +156,11 @@ export const saveOperatorToFirestore = async (operator: AssemblyOperator) => {
  */
 export const deleteOperatorFromFirestore = async (operatorId: string) => {
   if (!operatorId) return;
-  await deleteDoc(doc(db, 'operators', operatorId));
+  try {
+    await deleteDoc(doc(db, 'operators', operatorId));
+  } catch (error) {
+    console.error('Erro ao remover operador do Firestore:', error);
+  }
 };
 
 /**
@@ -138,8 +188,13 @@ export const subscribeUsers = (onUpdate: (users: UserProfile[]) => void) => {
  */
 export const saveUserToFirestore = async (user: UserProfile) => {
   if (!user.id) return;
-  const docRef = doc(db, 'users', user.id);
-  await setDoc(docRef, user, { merge: true });
+  try {
+    const cleanUser = sanitizeForFirestore(user);
+    const docRef = doc(db, 'users', user.id);
+    await setDoc(docRef, cleanUser, { merge: true });
+  } catch (error) {
+    console.error('Erro ao salvar usuário no Firestore:', error);
+  }
 };
 
 /**
@@ -147,6 +202,10 @@ export const saveUserToFirestore = async (user: UserProfile) => {
  */
 export const deleteUserFromFirestore = async (userId: string) => {
   if (!userId) return;
-  await deleteDoc(doc(db, 'users', userId));
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch (error) {
+    console.error('Erro ao remover usuário do Firestore:', error);
+  }
 };
 

@@ -456,12 +456,14 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                         key={ord.id ? `${ord.id}-${idx}` : `ord-${idx}`}
                         draggable={!isReadOnly}
                         onDragStart={(e) => handleDragStart(e, ord.id)}
-                        className={`bg-white p-3.5 rounded-2xl border shadow-2xs hover:shadow-md transition-all ${
+                        className={`p-3.5 rounded-2xl border transition-all ${
                           isReadOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
                         } group relative ${
-                          ord.column === 'hoje'
-                            ? 'border-blue-200 shadow-2xs'
-                            : 'border-slate-100'
+                          ord.urgencyRequest?.status === 'pending'
+                            ? 'bg-amber-50/90 border-amber-300/90 ring-2 ring-amber-400/20 shadow-xs'
+                            : ord.column === 'hoje'
+                            ? 'bg-white border-blue-200 shadow-2xs'
+                            : 'bg-white border-slate-100 shadow-2xs'
                         }`}
                       >
                         {/* Card Actions (Delete & Drag Handle) */}
@@ -499,11 +501,11 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                 e.stopPropagation();
                                 setSelectedOrderForStatusModal(ord);
                               }}
-                              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
                               title="Clique para relatar status / motivo desta OP"
                             >
                               <span>OP: {ord.orderId}</span>
-                              <span className="material-symbols-outlined text-[12px]">edit_note</span>
+                              <span className="material-symbols-outlined text-[12px] text-slate-400">edit_note</span>
                             </button>
                           </div>
                         </div>
@@ -521,8 +523,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                           {(ord.priority === 'ALTA PRIORIDADE' || ord.urgencyRequest) && (
                             <div className="flex flex-wrap items-center gap-1 pt-0.5">
                               {ord.priority === 'ALTA PRIORIDADE' && (
-                                <span className="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded text-[9px] font-bold inline-block">
-                                  🔥 ALTA PRIORIDADE
+                                <span className="bg-amber-50/80 text-amber-800 border border-amber-200/60 px-1.5 py-0.5 rounded-md text-[9px] font-medium inline-block">
+                                  Alta Prioridade
                                 </span>
                               )}
                               {ord.urgencyRequest?.status === 'pending' && (
@@ -532,29 +534,29 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                     e.stopPropagation();
                                     setSelectedOrderForStatusModal(ord);
                                   }}
-                                  className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[9px] font-bold animate-pulse inline-flex items-center gap-1 cursor-pointer hover:bg-amber-200 transition-colors"
+                                  className="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-md text-[9px] font-medium inline-flex items-center gap-1 cursor-pointer hover:bg-amber-100 transition-colors"
                                   title="Solicitação de Urgência Pendente - Clique para avaliar"
                                 >
                                   <span className="material-symbols-outlined text-[11px] text-amber-600">bolt</span>
-                                  <span>⚡ Urgência Solicitada</span>
+                                  <span>Urgência Solicitada</span>
                                 </button>
                               )}
                               {ord.urgencyRequest?.status === 'approved' && (
                                 <span
-                                  className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1"
+                                  className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.5 rounded-md text-[9px] font-medium inline-flex items-center gap-1"
                                   title={`Urgência Aprovada por ${ord.urgencyRequest.evaluatedBy}`}
                                 >
                                   <span className="material-symbols-outlined text-[11px] text-emerald-600">verified</span>
-                                  <span>⚡ Urgência Aceita</span>
+                                  <span>Urgência Aceita</span>
                                 </span>
                               )}
                               {ord.urgencyRequest?.status === 'rejected' && (
                                 <span
-                                  className="bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1"
+                                  className="bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-md text-[9px] font-medium inline-flex items-center gap-1"
                                   title={`Urgência Recusada por ${ord.urgencyRequest.evaluatedBy}: ${ord.urgencyRequest.evaluatorNote}`}
                                 >
-                                  <span className="material-symbols-outlined text-[11px] text-rose-600">cancel</span>
-                                  <span>❌ Urgência Recusada</span>
+                                  <span className="material-symbols-outlined text-[11px] text-slate-400">info</span>
+                                  <span>Urgência Recusada</span>
                                 </span>
                               )}
                             </div>
@@ -701,7 +703,14 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                         </tr>
                       ) : (
                         colOrders.map((ord, idx) => (
-                          <tr key={ord.id ? `${ord.id}-${idx}` : `ord-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                          <tr
+                            key={ord.id ? `${ord.id}-${idx}` : `ord-${idx}`}
+                            className={`transition-colors ${
+                              ord.urgencyRequest?.status === 'pending'
+                                ? 'bg-amber-50/80 hover:bg-amber-100/70'
+                                : 'hover:bg-slate-50/80'
+                            }`}
+                          >
                             <td className="px-5 py-4 font-bold text-blue-600">
                               <button
                                 type="button"
@@ -785,16 +794,17 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                   </button>
                                 )}
                                 {ord.urgencyRequest?.status === 'approved' && (
-                                  <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded text-[10px] font-bold">
-                                    <span>⚡ Urgência Aceita</span>
+                                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-medium">
+                                    <span>Urgência Aceita</span>
                                   </span>
                                 )}
                                 {ord.urgencyRequest?.status === 'rejected' && (
                                   <span
-                                    className="inline-flex items-center gap-1 bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded text-[10px] font-bold"
+                                    className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md text-[10px] font-medium"
                                     title={`Recusada por ${ord.urgencyRequest.evaluatedBy}: ${ord.urgencyRequest.evaluatorNote}`}
                                   >
-                                    <span>❌ Urgência Recusada</span>
+                                    <span className="material-symbols-outlined text-[11px] text-slate-400">info</span>
+                                    <span>Urgência Recusada</span>
                                   </span>
                                 )}
                               </div>
