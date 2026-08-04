@@ -53,6 +53,7 @@ export interface OrderItem {
   progress: number; // 0 - 100
   column: KanbanColumnId;
   productionDate?: string;
+  deliveryDate?: string; // Data prevista de entrega
   priority?: PriorityLevel;
   executionStatus: ExecutionStatus;
   delayReason?: string;
@@ -96,7 +97,7 @@ export interface Store {
   status: 'Ativa' | 'Inativa';
 }
 
-export type ActiveTab = 'dashboard' | 'order-entry' | 'productivity' | 'completed' | 'statistics' | 'history' | 'stores' | 'users' | 'reports';
+export type ActiveTab = 'dashboard' | 'pending-date' | 'order-entry' | 'productivity' | 'completed' | 'statistics' | 'history' | 'stores' | 'users' | 'reports';
 
 export type UserStatus = 'approved' | 'pending' | 'blocked';
 
@@ -106,6 +107,7 @@ export interface UserPermissions {
   canManageStores: boolean;
   canManageUsers: boolean;
   canAccessOrderEntry?: boolean;
+  canAccessPendingDate?: boolean;
   canAccessDashboard?: boolean;
   canAccessProductivity?: boolean;
   canAccessCompleted?: boolean;

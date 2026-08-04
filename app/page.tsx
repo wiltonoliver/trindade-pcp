@@ -16,6 +16,7 @@ import { StoreManagement } from '@/components/StoreManagement';
 import { UserManagement } from '@/components/UserManagement';
 import { ReportsPage } from '@/components/ReportsPage';
 import { CompletedOrders } from '@/components/CompletedOrders';
+import { PendingDateOrders } from '@/components/PendingDateOrders';
 
 import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 import { NotificationsDrawer } from '@/components/NotificationsDrawer';
@@ -320,6 +321,8 @@ export default function FactoryOpsApp() {
     switch (tab) {
       case 'order-entry':
         return p.canAccessOrderEntry !== false;
+      case 'pending-date':
+        return p.canAccessPendingDate !== false;
       case 'dashboard':
         return p.canAccessDashboard !== false;
       case 'productivity':
@@ -401,6 +404,12 @@ export default function FactoryOpsApp() {
   };
 
   const completedCount = orders.filter((o) => o.executionStatus === 'concluido' || o.progress === 100).length;
+  const pendingDateCount = orders.filter(
+    (o) =>
+      o.executionStatus !== 'concluido' &&
+      o.progress !== 100 &&
+      (o.column === 'nao_planejado' || !o.productionDate || o.productionDate.toLowerCase().includes('aguardando'))
+  ).length;
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
@@ -409,6 +418,7 @@ export default function FactoryOpsApp() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingCount={0}
+        pendingDateCount={pendingDateCount}
         pendingUsersCount={pendingUsersCount}
         completedCount={completedCount}
         currentUser={currentUser}
@@ -433,6 +443,23 @@ export default function FactoryOpsApp() {
 
       {/* Main View Body */}
       <main className="ml-0 lg:ml-[260px] flex-1 bg-slate-50 min-h-[calc(100vh-64px)] transition-all">
+        {activeTab === 'pending-date' && isTabAllowed('pending-date') && (
+          <PendingDateOrders
+            orders={orders}
+            setOrders={setOrders}
+            stores={stores}
+            operators={operators}
+            searchQuery={searchQuery}
+            currentUser={currentUser}
+            onNavigateToOrderEntry={() => {
+              if (isTabAllowed('order-entry')) {
+                setActiveTab('order-entry');
+              }
+            }}
+            onNavigateToDashboard={() => setActiveTab('dashboard')}
+          />
+        )}
+
         {activeTab === 'dashboard' && isTabAllowed('dashboard') && (
           <PlanningDashboard
             orders={orders}
@@ -453,6 +480,7 @@ export default function FactoryOpsApp() {
           <OrderEntry
             onAddOrdersToPlanning={handleAddOrdersToPlanning}
             onNavigateToDashboard={() => setActiveTab('dashboard')}
+            onNavigateToPendingDate={() => setActiveTab('pending-date')}
             stores={stores}
             onNavigateToStores={() => setActiveTab('stores')}
             defaultSelectedStore={selectedStoreForOrder}

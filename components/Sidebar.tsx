@@ -8,6 +8,7 @@ interface SidebarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   pendingCount?: number;
+  pendingDateCount?: number;
   pendingUsersCount?: number;
   completedCount?: number;
   currentUser?: UserProfile | null;
@@ -20,6 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   pendingCount = 0,
+  pendingDateCount = 0,
   pendingUsersCount = 0,
   completedCount = 0,
   currentUser,
@@ -38,6 +40,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: 'assignment',
       badge: null,
       permissionKey: 'canAccessOrderEntry' as keyof UserPermissions,
+    },
+    {
+      id: 'pending-date' as ActiveTab,
+      label: 'Aguardando Data',
+      icon: 'pending_actions',
+      badge: pendingDateCount > 0 ? pendingDateCount : null,
+      permissionKey: 'canAccessPendingDate' as keyof UserPermissions,
     },
     {
       id: 'dashboard' as ActiveTab,

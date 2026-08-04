@@ -314,7 +314,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         {/* Modal Body Scrollable */}
         <div className="p-6 overflow-y-auto space-y-6 text-slate-800">
           {/* Order Quick Summary Info */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs">
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase block">Quantidade</span>
               <span className="font-bold text-slate-900 block truncate">{order.quantity || 1} {sanitizeUnit(order.unit)}</span>
@@ -326,14 +326,20 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               </span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Data Atual</span>
-              <span className="font-bold text-slate-900">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Data Produção</span>
+              <span className="font-bold text-slate-900 truncate block">
                 {order.productionDate ? order.productionDate : 'Aguardando Data'}
               </span>
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase block">Progresso Atual</span>
-              <span className="font-bold text-slate-900">{order.progress}%</span>
+              <span className="text-[10px] font-bold text-amber-700 uppercase block">Prev. Entrega</span>
+              <span className="font-bold text-amber-900 truncate block">
+                {order.deliveryDate || 'Sem data'}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase block">Progresso</span>
+              <span className="font-bold text-slate-900">{order.progress || 0}%</span>
             </div>
           </div>
 

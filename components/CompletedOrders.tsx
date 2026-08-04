@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { OrderItem, UserProfile } from '@/types/factory';
+import { OrderItem, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
-import { saveOrderToFirestore } from '@/lib/firestoreSync';
+import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
 
 interface CompletedOrdersProps {
   orders: OrderItem[];
@@ -21,6 +21,9 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   const [localSearch, setLocalSearch] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('ALL');
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<OrderItem | null>(null);
+  const [orderToRemake, setOrderToRemake] = useState<OrderItem | null>(null);
+  const [remakeNote, setRemakeNote] = useState('');
+  const [orderToDelete, setOrderToDelete] = useState<OrderItem | null>(null);
 
   // Filter completed orders (executionStatus === 'concluido' or progress === 100)
   const completedOrders = useMemo(() => {
@@ -66,6 +69,55 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
     );
     setSelectedOrderForModal(updatedOrder);
     saveOrderToFirestore(updatedOrder);
+  };
+
+  // Confirm remaking order (sending piece back to production)
+  const handleConfirmRemake = () => {
+    if (!orderToRemake) return;
+
+    const now = new Date().toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const remakeLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: now,
+      author: currentUser?.name || 'Gestor',
+      status: 'pendente',
+      reason: 'Enviado para refazer',
+      note: remakeNote.trim() ? remakeNote.trim() : 'Pedido retornado para ser refeito na fábrica',
+      actionType: 'return_to_pending',
+    };
+
+    const updatedOrder: OrderItem = {
+      ...orderToRemake,
+      executionStatus: 'pendente',
+      progress: 0,
+      column: 'hoje',
+      statusHistory: [...(orderToRemake.statusHistory || []), remakeLog],
+    };
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
+    );
+    saveOrderToFirestore(updatedOrder);
+
+    setOrderToRemake(null);
+    setRemakeNote('');
+  };
+
+  // Confirm deleting order
+  const handleConfirmDelete = async () => {
+    if (!orderToDelete) return;
+
+    const targetId = orderToDelete.id;
+    setOrders((prev) => prev.filter((o) => o.id !== targetId));
+    await deleteOrderFromFirestore(targetId);
+    setOrderToDelete(null);
   };
 
   // Helper to format completion date from history
@@ -232,7 +284,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                   <th className="py-3.5 px-5">Montador Responsável</th>
                   <th className="py-3.5 px-5">Data de Conclusão</th>
                   <th className="py-3.5 px-5 text-center">Status / Urgência</th>
-                  <th className="py-3.5 px-5 text-right">Ação</th>
+                  <th className="py-3.5 px-5 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -313,19 +365,51 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                         </div>
                       </td>
 
-                      {/* Action */}
-                      <td className="py-4 px-5 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedOrderForModal(ord);
-                          }}
-                          className="px-3 py-1.5 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 shadow-2xs"
-                        >
-                          <span>Histórico</span>
-                          <span className="material-symbols-outlined text-sm">visibility</span>
-                        </button>
+                      {/* Actions */}
+                      <td className="py-4 px-5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Voltar para Refazer */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOrderToRemake(ord);
+                            }}
+                            title="Voltar pedido para ser refeito na fábrica"
+                            className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          >
+                            <span className="material-symbols-outlined text-sm text-amber-600">replay</span>
+                            <span>Refazer</span>
+                          </button>
+
+                          {/* Excluir Pedido */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOrderToDelete(ord);
+                            }}
+                            title="Excluir pedido definitivamente"
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          >
+                            <span className="material-symbols-outlined text-sm text-slate-500">delete</span>
+                            <span>Excluir</span>
+                          </button>
+
+                          {/* Ver Histórico */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedOrderForModal(ord);
+                            }}
+                            title="Ver histórico detalhado do pedido"
+                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-slate-200 shadow-2xs"
+                          >
+                            <span className="material-symbols-outlined text-sm">visibility</span>
+                            <span className="hidden xl:inline">Histórico</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -335,6 +419,123 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal: Confirmar Refazer Pedido */}
+      {orderToRemake && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center font-bold shrink-0">
+                  <span className="material-symbols-outlined text-xl">replay</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Voltar Pedido para Refazer</h3>
+                  <p className="text-xs text-slate-500 font-medium">OP #{orderToRemake.orderId}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderToRemake(null);
+                  setRemakeNote('');
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                Ao confirmar, a peça <strong className="text-slate-900">{orderToRemake.itemDescription}</strong> sairá do histórico de concluídos e retornará para a fila de produção ativa na coluna <strong className="text-slate-900">&quot;Hoje&quot;</strong>.
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Motivo / Observação para a fábrica (opcional):
+                </label>
+                <textarea
+                  value={remakeNote}
+                  onChange={(e) => setRemakeNote(e.target.value)}
+                  placeholder="Ex: Peça com incorreção nas medidas, refazer esquadria..."
+                  rows={3}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:bg-white transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderToRemake(null);
+                  setRemakeNote('');
+                }}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemake}
+                className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-base">replay</span>
+                <span>Confirmar e Refazer</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmar Excluir Pedido */}
+      {orderToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center font-bold shrink-0">
+                  <span className="material-symbols-outlined text-xl">delete_forever</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Excluir Pedido</h3>
+                  <p className="text-xs text-slate-500 font-medium">OP #{orderToDelete.orderId}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed font-medium">
+              Tem certeza que deseja excluir permanentemente o pedido <strong className="text-slate-900">OP #{orderToDelete.orderId}</strong> ({orderToDelete.itemDescription})? Esta ação não poderá ser desfeita.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setOrderToDelete(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <span className="material-symbols-outlined text-base">delete</span>
+                <span>Excluir Definitivamente</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Order Details & History Modal */}
       {selectedOrderForModal && (

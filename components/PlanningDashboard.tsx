@@ -75,7 +75,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const [newStore, setNewStore] = useState('Loja E - Flamboyant');
   const [newItemDesc, setNewItemDesc] = useState('30x Calças Sarja Executive');
   const [newQty, setNewQty] = useState(30);
-  const [newColumn, setNewColumn] = useState<KanbanColumnId>('nao_planejado');
+  const [newColumn, setNewColumn] = useState<KanbanColumnId>('hoje');
   const [newPriority, setNewPriority] = useState<PriorityLevel>('NORMAL');
 
   // Compute 5 consecutive business days (skipping weekends)
@@ -125,14 +125,6 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     borderHighlight?: string;
     defaultDateStr: string;
   }[] = [
-    {
-      id: 'nao_planejado',
-      title: 'Aguardando data',
-      dotColor: 'bg-amber-500',
-      badgeBg: 'bg-amber-50',
-      badgeText: 'text-amber-700',
-      defaultDateStr: '',
-    },
     {
       id: 'hoje',
       title: `Hoje ${d1.formattedFull}`,
@@ -362,7 +354,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
       {/* Pending Urgency Requests Top Alert Banner */}
       {pendingUrgencyOrders.length > 0 && (
-        <div className="bg-amber-50 border border-amber-300 text-amber-950 px-4 py-3 rounded-2xl text-xs font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs animate-fadeIn">
+        <div className="bg-amber-100/90 border border-amber-400 border-l-4 border-l-amber-500 text-amber-950 px-4 py-3.5 rounded-2xl text-xs font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-500 text-white rounded-xl font-bold flex items-center justify-center shrink-0 shadow-xs">
               <span className="material-symbols-outlined text-lg animate-pulse">bolt</span>
@@ -371,7 +363,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
               <p className="font-bold text-amber-950 text-xs">
                 {pendingUrgencyOrders.length} {pendingUrgencyOrders.length === 1 ? 'Solicitação de Urgência Pendente' : 'Solicitações de Urgência Pendentes'}
               </p>
-              <p className="text-amber-800 text-[11px] font-medium mt-0.5">
+              <p className="text-amber-900 text-[11px] font-medium mt-0.5">
                 {isReadOnly 
                   ? 'Sua solicitação de urgência foi enviada aos gestores e está aguardando avaliação.'
                   : 'O setor de Vendas solicitou urgência em pedido(s). Clique abaixo para avaliar as justificativas.'}
@@ -394,7 +386,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
       {/* View Mode Switching: Kanban vs List View */}
       {viewMode === 'kanban' ? (
         /* Kanban Board */
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 min-h-[520px]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[520px]">
           {columnsConfig.map((col) => {
             const colOrders = getOrdersByColumn(col.id);
             return (
@@ -460,7 +452,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                           isReadOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
                         } group relative ${
                           ord.urgencyRequest?.status === 'pending'
-                            ? 'bg-amber-50/90 border-amber-300/90 ring-2 ring-amber-400/20 shadow-xs'
+                            ? 'bg-amber-100/90 border-amber-400 border-l-4 border-l-amber-500 ring-2 ring-amber-400/30 shadow-xs'
                             : ord.column === 'hoje'
                             ? 'bg-white border-blue-200 shadow-2xs'
                             : 'bg-white border-slate-100 shadow-2xs'
@@ -534,10 +526,10 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                     e.stopPropagation();
                                     setSelectedOrderForStatusModal(ord);
                                   }}
-                                  className="bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded-md text-[9px] font-medium inline-flex items-center gap-1 cursor-pointer hover:bg-amber-100 transition-colors"
+                                  className="bg-amber-500 hover:bg-amber-600 text-white font-semibold px-2 py-0.5 rounded-md text-[9px] inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                                   title="Solicitação de Urgência Pendente - Clique para avaliar"
                                 >
-                                  <span className="material-symbols-outlined text-[11px] text-amber-600">bolt</span>
+                                  <span className="material-symbols-outlined text-[11px] text-white">bolt</span>
                                   <span>Urgência Solicitada</span>
                                 </button>
                               )}
@@ -605,28 +597,24 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
             let sectionDesc = '';
             let sectionIcon = 'list';
 
-            if (col.id === 'nao_planejado') {
-              sectionTitle = '1. Pedidos Aguardando Data';
-              sectionDesc = 'Pedidos recebidos do sistema e lojas que ainda não possuem data de produção definida.';
-              sectionIcon = 'pending_actions';
-            } else if (col.id === 'hoje') {
-              sectionTitle = `2. Produção de Hoje (${d1.formattedFull})`;
+            if (col.id === 'hoje') {
+              sectionTitle = `1. Produção de Hoje (${d1.formattedFull})`;
               sectionDesc = 'Ordens de produção ativas em corte, costura ou acabamento com meta de conclusão para hoje.';
               sectionIcon = 'today';
             } else if (col.id === 'amanha') {
-              sectionTitle = `3. Produção do Próximo Dia (${d2.formattedFull})`;
+              sectionTitle = `2. Produção do Próximo Dia (${d2.formattedFull})`;
               sectionDesc = 'Planejamento e preparação de materiais para as ordens agendadas para o próximo dia útil.';
               sectionIcon = 'event_upcoming';
             } else if (col.id === 'dia_3') {
-              sectionTitle = `4. Programação para ${d3.formattedFull}`;
+              sectionTitle = `3. Programação para ${d3.formattedFull}`;
               sectionDesc = 'Fila de ordens de produção programadas para a sequência da semana.';
               sectionIcon = 'calendar_month';
             } else if (col.id === 'dia_4') {
-              sectionTitle = `5. Programação para ${d4.formattedFull}`;
+              sectionTitle = `4. Programação para ${d4.formattedFull}`;
               sectionDesc = 'Fila de ordens de produção programadas para a sequência da semana.';
               sectionIcon = 'calendar_month';
             } else if (col.id === 'dia_5') {
-              sectionTitle = `6. Programação para ${d5.formattedFull}`;
+              sectionTitle = `5. Programação para ${d5.formattedFull}`;
               sectionDesc = 'Fila de ordens de produção programadas para a sequência da semana.';
               sectionIcon = 'calendar_month';
             }
@@ -707,7 +695,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                             key={ord.id ? `${ord.id}-${idx}` : `ord-${idx}`}
                             className={`transition-colors ${
                               ord.urgencyRequest?.status === 'pending'
-                                ? 'bg-amber-50/80 hover:bg-amber-100/70'
+                                ? 'bg-amber-100/90 hover:bg-amber-200/80 border-l-4 border-l-amber-500 font-medium'
                                 : 'hover:bg-slate-50/80'
                             }`}
                           >
@@ -787,10 +775,11 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => setSelectedOrderForStatusModal(ord)}
-                                    className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[10px] font-bold animate-pulse cursor-pointer hover:bg-amber-200 transition-colors"
+                                    className="inline-flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white font-bold px-2 py-0.5 rounded text-[10px] cursor-pointer shadow-2xs transition-colors"
                                     title="Urgência Solicitada pelo Vendedor - Clique para avaliar"
                                   >
-                                    <span>⚡ Urgência Solicitada</span>
+                                    <span className="material-symbols-outlined text-[12px] text-white">bolt</span>
+                                    <span>Urgência Solicitada</span>
                                   </button>
                                 )}
                                 {ord.urgencyRequest?.status === 'approved' && (

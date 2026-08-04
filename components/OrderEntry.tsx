@@ -8,6 +8,7 @@ import { sanitizeUnit } from '@/lib/utils';
 interface OrderEntryProps {
   onAddOrdersToPlanning: (newOrders: OrderItem[]) => void;
   onNavigateToDashboard: () => void;
+  onNavigateToPendingDate?: () => void;
   stores?: Store[];
   onNavigateToStores?: () => void;
   defaultSelectedStore?: string;
@@ -21,12 +22,14 @@ interface ExtractedOrder {
   unit?: string;
   priority?: string;
   productionDate?: string;
+  deliveryDate?: string;
   notes?: string;
 }
 
 export const OrderEntry: React.FC<OrderEntryProps> = ({
   onAddOrdersToPlanning,
   onNavigateToDashboard,
+  onNavigateToPendingDate,
   stores = INITIAL_STORES,
   onNavigateToStores,
   defaultSelectedStore,
@@ -48,10 +51,19 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
       return () => clearTimeout(timer);
     }
   }, [defaultSelectedStore]);
+
   const [referenceDate, setReferenceDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
+
+  // Data prevista de entrega (default +7 dias)
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().split('T')[0];
+  });
+
   const [emailText, setEmailText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -71,6 +83,10 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
     setIsProcessing(true);
 
     try {
+      const formattedDefaultDelivery = expectedDeliveryDate
+        ? expectedDeliveryDate.split('-').reverse().join('/')
+        : '';
+
       const res = await fetch('/api/extract-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -78,6 +94,7 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
           emailText,
           storeName: selectedStore,
           referenceDate,
+          deliveryDate: formattedDefaultDelivery,
         }),
       });
 
@@ -87,7 +104,12 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
         throw new Error(data.error || 'Erro ao processar e-mail.');
       }
 
-      setExtractedOrders(data.orders || []);
+      const ordersWithDelivery: ExtractedOrder[] = (data.orders || []).map((o: any) => ({
+        ...o,
+        deliveryDate: o.deliveryDate || formattedDefaultDelivery,
+      }));
+
+      setExtractedOrders(ordersWithDelivery);
       setAiSummary(data.summary || 'Extração de itens concluída com sucesso!');
 
       // Add a success log
@@ -112,14 +134,28 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
     setExtractedOrders((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
+  const handleUpdateExtractedDeliveryDate = (index: number, newDate: string) => {
+    setExtractedOrders((prev) =>
+      prev.map((ord, idx) => (idx === index ? { ...ord, deliveryDate: newDate } : ord))
+    );
+  };
+
   const handleConfirmAndAddToDashboard = () => {
     if (extractedOrders.length === 0) return;
+
+    const formattedDefaultDelivery = expectedDeliveryDate
+      ? expectedDeliveryDate.split('-').reverse().join('/')
+      : '';
 
     const newItems: OrderItem[] = extractedOrders.map((ext, idx) => {
       const itemStore = ext.store || selectedStore;
       const descHasQty = ext.itemDescription.toLowerCase().startsWith(`${ext.quantity}x`) ||
                          ext.itemDescription.toLowerCase().startsWith(`${ext.quantity} `);
       const formattedDesc = descHasQty ? ext.itemDescription : `${ext.quantity}x ${ext.itemDescription}`;
+
+      const finalDeliveryDate = ext.deliveryDate
+        ? (ext.deliveryDate.includes('-') ? ext.deliveryDate.split('-').reverse().join('/') : ext.deliveryDate)
+        : formattedDefaultDelivery;
 
       return {
         id: `ext-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
@@ -138,6 +174,7 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
         progress: 0,
         column: 'nao_planejado',
         productionDate: ext.productionDate || referenceDate,
+        deliveryDate: finalDeliveryDate,
         priority: ext.priority?.includes('ALTA') ? 'ALTA PRIORIDADE' : 'NORMAL',
         executionStatus: 'pendente',
       };
@@ -147,7 +184,12 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
     setEmailText('');
     setExtractedOrders([]);
     setAiSummary(null);
-    onNavigateToDashboard();
+
+    if (onNavigateToPendingDate) {
+      onNavigateToPendingDate();
+    } else {
+      onNavigateToDashboard();
+    }
   };
 
   return (
@@ -167,6 +209,20 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
         {/* Form Column (7 cols) */}
         <section className="lg:col-span-7 space-y-6">
           <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
+            {/* Expected Delivery Date Field */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-xs text-slate-700 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[18px] text-amber-600">event</span>
+                <span>Data Prevista de Entrega</span>
+              </label>
+              <input
+                type="date"
+                value={expectedDeliveryDate}
+                onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all cursor-pointer"
+              />
+            </div>
+
             {/* Email Text Area */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -278,9 +334,12 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
                         <p className="font-semibold text-sm text-slate-900">
                           {ord.quantity}x {ord.itemDescription}
                         </p>
-                        <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
-                          <span>Loja: {ord.store || selectedStore}</span>
-                          <span>Data: {ord.productionDate || referenceDate}</span>
+                        <div className="flex flex-wrap items-center justify-between text-xs text-slate-500 font-medium pt-1 border-t border-slate-100 gap-2">
+                          <span>Loja: <strong className="text-slate-700">{ord.store || selectedStore}</strong></span>
+                          <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-bold text-[10px] flex items-center gap-1">
+                            <span className="material-symbols-outlined text-xs">local_shipping</span>
+                            <span>Entrega: {ord.deliveryDate || expectedDeliveryDate.split('-').reverse().join('/')}</span>
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -332,7 +391,7 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
                   <div className="w-5 h-5 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                     2
                   </div>
-                  <p>Certifique-se de que a loja correta está selecionada no seletor.</p>
+                  <p>As lojas e números de OP são identificados automaticamente em cada linha.</p>
                 </div>
               </div>
             </div>
