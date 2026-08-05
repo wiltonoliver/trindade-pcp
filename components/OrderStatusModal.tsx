@@ -47,6 +47,57 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   const [organizationScore, setOrganizationScore] = useState<number>(order?.organizationScore || 5);
   const [disciplineScore, setDisciplineScore] = useState<number>(order?.disciplineScore || 5);
 
+  // Editable item description & delivery date
+  const [editableItemDescription, setEditableItemDescription] = useState<string>(order?.itemDescription || '');
+  const [editableDeliveryDate, setEditableDeliveryDate] = useState<string>(order?.deliveryDate || '');
+
+  // Track current order ID to reset local state when order changes
+  const [prevOrderId, setPrevOrderId] = useState<string | null>(null);
+
+  if (order && order.id !== prevOrderId) {
+    setPrevOrderId(order.id);
+    setSelectedStatus(order.executionStatus || (order.progress === 100 ? 'concluido' : 'nao_produzido'));
+    setSelectedReason(order.delayReason || order.pendingReason || '');
+    setCustomNote('');
+    setReturnToPendingDate(!order.productionDate);
+    setCleanlinessScore(order.cleanlinessScore || 5);
+    setOrganizationScore(order.organizationScore || 5);
+    setDisciplineScore(order.disciplineScore || 5);
+    setEditableItemDescription(order.itemDescription || '');
+    setEditableDeliveryDate(order.deliveryDate || '');
+  }
+
+  // Convert DD/MM/YYYY or YYYY-MM-DD to YYYY-MM-DD for <input type="date">
+  const formatToInputDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+    return dateStr;
+  };
+
+  // Convert YYYY-MM-DD or DD/MM/YYYY to DD/MM/YYYY for saving/displaying
+  const formatToDisplayDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    if (dateStr.includes('-')) {
+      const parts = dateStr.split('-');
+      if (parts.length === 3 && parts[0].length === 4) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    return dateStr;
+  };
+
+  const hasFieldsChanged = useMemo(() => {
+    if (!order) return false;
+    const descChanged = (editableItemDescription || '').trim() !== (order.itemDescription || '').trim();
+    const dateChanged = (editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim();
+    return descChanged || dateChanged;
+  }, [order, editableItemDescription, editableDeliveryDate]);
+
   // Urgency Request Local States
   const [urgencyReasonText, setUrgencyReasonText] = useState<string>('');
   const [showUrgencyForm, setShowUrgencyForm] = useState<boolean>(false);
@@ -197,6 +248,48 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     }
   };
 
+  const handleSaveFieldsOnly = () => {
+    if (!order) return;
+    const nowStr = new Date().toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const authorName = currentUser?.name || currentUser?.role || 'Usuário';
+
+    const fieldChangeNotes: string[] = [];
+    if ((editableItemDescription || '').trim() !== (order.itemDescription || '').trim()) {
+      fieldChangeNotes.push(`Descrição da peça alterada para "${editableItemDescription.trim()}"`);
+    }
+    if ((editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim()) {
+      fieldChangeNotes.push(`Data de entrega alterada para "${editableDeliveryDate.trim() || 'Sem data'}"`);
+    }
+
+    const newLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: nowStr,
+      author: authorName,
+      status: order.executionStatus,
+      reason: 'Atualização de Cadastro / Peça / Entrega',
+      note: fieldChangeNotes.join('; '),
+      actionType: 'status_update',
+    };
+
+    const updatedOrder: OrderItem = {
+      ...order,
+      itemDescription: editableItemDescription.trim() || order.itemDescription,
+      deliveryDate: editableDeliveryDate.trim(),
+      statusHistory: fieldChangeNotes.length > 0 ? [newLog, ...(order.statusHistory || [])] : order.statusHistory,
+    };
+
+    onUpdateOrder(updatedOrder);
+    saveOrderToFirestore(updatedOrder);
+    onClose();
+  };
+
   const handleSave = () => {
     const nowStr = new Date().toLocaleString('pt-BR', {
       day: '2-digit',
@@ -244,6 +337,22 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     const effectiveReason = selectedReason || (selectedStatus === 'concluido' ? '' : 'Sem motivo especificado');
 
+    // Notes for field changes if updated
+    const fieldChangeNotes: string[] = [];
+    if ((editableItemDescription || '').trim() !== (order.itemDescription || '').trim()) {
+      fieldChangeNotes.push(`Descrição da peça alterada para "${editableItemDescription.trim()}"`);
+    }
+    if ((editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim()) {
+      fieldChangeNotes.push(`Data de entrega alterada para "${editableDeliveryDate.trim() || 'Sem data'}"`);
+    }
+
+    let combinedNote = customNote.trim();
+    if (fieldChangeNotes.length > 0) {
+      combinedNote = combinedNote
+        ? `${combinedNote} | ${fieldChangeNotes.join('; ')}`
+        : fieldChangeNotes.join('; ');
+    }
+
     // Build history log entry with 5S scores
     const newLog: OrderStatusHistoryLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -251,7 +360,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       author: authorName,
       status: selectedStatus,
       reason: effectiveReason,
-      note: customNote.trim() || undefined,
+      note: combinedNote || undefined,
       previousDate: order.productionDate || 'Aguardando Data',
       actionType: actionType,
       cleanlinessScore,
@@ -264,6 +373,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     const updatedOrder: OrderItem = {
       ...order,
+      itemDescription: editableItemDescription.trim() || order.itemDescription,
+      deliveryDate: editableDeliveryDate.trim(),
       executionStatus: finalStatus,
       progress: finalProgress,
       column: finalColumn,
@@ -278,6 +389,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     };
 
     onUpdateOrder(updatedOrder);
+    saveOrderToFirestore(updatedOrder);
     onClose();
   };
 
@@ -298,7 +410,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-300 font-medium truncate max-w-md">
-                {order.itemDescription}
+                {editableItemDescription || order.itemDescription}
               </p>
             </div>
           </div>
@@ -334,12 +446,59 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
             <div>
               <span className="text-[10px] font-bold text-amber-700 uppercase block">Prev. Entrega</span>
               <span className="font-bold text-amber-900 truncate block">
-                {order.deliveryDate || 'Sem data'}
+                {editableDeliveryDate || order.deliveryDate || 'Sem data'}
               </span>
             </div>
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase block">Progresso</span>
               <span className="font-bold text-slate-900">{order.progress || 0}%</span>
+            </div>
+          </div>
+
+          {/* Editable Fields Section: Item Description & Delivery Date */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-blue-100 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-blue-600 text-base">edit_note</span>
+                <span>Editar Peça &amp; Data de Previsão de Entrega</span>
+              </span>
+              {hasFieldsChanged && (
+                <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold border border-amber-300 animate-pulse flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs">edit_square</span>
+                  Alterações não salvas
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Item Description (Peça) */}
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[15px] text-blue-600">inventory_2</span>
+                  <span>Descrição da Peça (Esquadria)</span>
+                </label>
+                <input
+                  type="text"
+                  value={editableItemDescription}
+                  onChange={(e) => setEditableItemDescription(e.target.value)}
+                  placeholder="Descrição ou especificação da esquadria..."
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-all"
+                />
+              </div>
+
+              {/* Delivery Date */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[15px] text-amber-600">event</span>
+                  <span>Data Prevista de Entrega</span>
+                </label>
+                <input
+                  type="date"
+                  value={formatToInputDate(editableDeliveryDate)}
+                  onChange={(e) => setEditableDeliveryDate(formatToDisplayDate(e.target.value))}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-all cursor-pointer"
+                />
+              </div>
             </div>
           </div>
 
@@ -888,34 +1047,56 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
-          {isReadOnly ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
-            >
-              <span>Fechar Visualização</span>
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">save</span>
-                <span>Salvar Relato &amp; Atualizar Status</span>
-              </button>
-            </>
-          )}
+        <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+          <div className="text-[11px] text-slate-500 font-medium">
+            {hasFieldsChanged && (
+              <span className="text-amber-800 font-bold flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm text-amber-600">warning</span>
+                Existem edições de dados não salvas
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {isReadOnly ? (
+              <>
+                {hasFieldsChanged && (
+                  <button
+                    type="button"
+                    onClick={handleSaveFieldsOnly}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">save</span>
+                    <span>Salvar Alterações</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <span>Fechar Visualização</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-[18px]">save</span>
+                  <span>Salvar &amp; Atualizar Pedido</span>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
