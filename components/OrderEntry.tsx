@@ -299,11 +299,50 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
               {/* Display Extracted Items if available */}
               {extractedOrders.length > 0 ? (
                 <div className="space-y-4">
-                  {aiSummary && (
-                    <div className="p-3.5 bg-blue-50 border border-blue-100 text-blue-900 rounded-xl text-xs font-medium mb-3">
-                      💡 {aiSummary}
+                  {/* Summary metrics banner */}
+                  <div className="p-3.5 bg-blue-50/80 border border-blue-100 text-blue-900 rounded-xl text-xs mb-3 space-y-2.5">
+                    {aiSummary && (
+                      <div className="text-[11px] font-medium text-blue-800 border-b border-blue-100 pb-2 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-sm text-blue-600">auto_awesome</span>
+                        <span>{aiSummary}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-white/90 p-2 rounded-lg border border-blue-100/80 shadow-2xs">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          Itens
+                        </span>
+                        <span className="font-extrabold text-sm text-blue-900">
+                          {extractedOrders.length}
+                        </span>
+                      </div>
+
+                      <div className="bg-white/90 p-2 rounded-lg border border-blue-100/80 shadow-2xs">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          Peças
+                        </span>
+                        <span className="font-extrabold text-sm text-emerald-700">
+                          {extractedOrders.reduce((acc, curr) => acc + (Number(curr.quantity) || 1), 0)}
+                        </span>
+                      </div>
+
+                      <div className="bg-white/90 p-2 rounded-lg border border-blue-100/80 shadow-2xs">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          OPs Únicas
+                        </span>
+                        <span className="font-extrabold text-sm text-indigo-900">
+                          {
+                            new Set(
+                              extractedOrders
+                                .map((o) => (o.orderId ? o.orderId.trim().toUpperCase() : ''))
+                                .filter(Boolean)
+                            ).size
+                          }
+                        </span>
+                      </div>
                     </div>
-                  )}
+                  </div>
 
                   <div className="space-y-3 max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
                     {extractedOrders.map((ord, idx) => (
