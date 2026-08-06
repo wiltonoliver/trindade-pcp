@@ -1,4 +1,22 @@
-export type KanbanColumnId = 'nao_planejado' | 'hoje' | 'amanha' | 'dia_3' | 'dia_4' | 'dia_5' | 'proximos_7_dias';
+export type KanbanColumnId =
+  | 'nao_planejado'
+  | 'hoje'
+  | 'amanha'
+  | 'dia_3'
+  | 'dia_4'
+  | 'dia_5'
+  | 'dia_6'
+  | 'dia_7'
+  | 'dia_8'
+  | 'dia_9'
+  | 'dia_10'
+  | 'dia_11'
+  | 'dia_12'
+  | 'dia_13'
+  | 'dia_14'
+  | 'dia_15'
+  | 'proximos_7_dias'
+  | string;
 
 export type PriorityLevel = 'ALTA PRIORIDADE' | 'NORMAL';
 

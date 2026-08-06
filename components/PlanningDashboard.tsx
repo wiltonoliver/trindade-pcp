@@ -27,6 +27,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'mes' | 'semana'>('mes');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [currentPage, setCurrentPage] = useState<number>(1); // 1, 2, or 3 (3 screens = 15 business days)
   const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<OrderItem | null>(null);
@@ -46,12 +47,14 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     setOrders((prev) =>
       prev.map((ord) => {
         if (ord.id === orderId) {
-          return {
+          const updated = {
             ...ord,
             assignedOperatorId: operator ? operator.id : undefined,
             assignedOperatorName: operator ? operator.name : undefined,
             assignedOperatorCode: operator ? operator.code : undefined,
           };
+          saveOrderToFirestore(updated).catch(() => {});
+          return updated;
         }
         return ord;
       })
@@ -78,9 +81,9 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const [newColumn, setNewColumn] = useState<KanbanColumnId>('hoje');
   const [newPriority, setNewPriority] = useState<PriorityLevel>('NORMAL');
 
-  // Compute 5 consecutive business days (skipping weekends)
-  const getBusinessDays = () => {
-    const days: { date: Date; dateStr: string; formattedFull: string; dayName: string }[] = [];
+  // Compute 15 consecutive business days (skipping weekends)
+  const get15BusinessDays = () => {
+    const days: { date: Date; dateStr: string; formattedFull: string; dayName: string; index: number }[] = [];
     const curr = new Date();
 
     // Skip weekend to next business day if today is weekend
@@ -90,18 +93,19 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
       curr.setDate(curr.getDate() + 1);
     }
 
-    while (days.length < 5) {
+    while (days.length < 15) {
       const dow = curr.getDay();
       if (dow !== 0 && dow !== 6) {
         const rawDay = curr.toLocaleDateString('pt-BR', { weekday: 'long' });
         const dayName = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
         const dateStr = curr.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        
+
         days.push({
           date: new Date(curr),
           dateStr,
           formattedFull: `${dayName} ${dateStr}`,
           dayName,
+          index: days.length + 1,
         });
       }
       curr.setDate(curr.getDate() + 1);
@@ -109,64 +113,61 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     return days;
   };
 
-  const businessDays = getBusinessDays();
-  const d1 = businessDays[0];
-  const d2 = businessDays[1];
-  const d3 = businessDays[2];
-  const d4 = businessDays[3];
-  const d5 = businessDays[4];
+  const allBusinessDays = get15BusinessDays();
 
-  const columnsConfig: {
-    id: KanbanColumnId;
-    title: string;
-    dotColor: string;
-    badgeBg: string;
-    badgeText: string;
-    borderHighlight?: string;
-    defaultDateStr: string;
-  }[] = [
-    {
-      id: 'hoje',
-      title: `Hoje ${d1.formattedFull}`,
-      dotColor: 'bg-blue-600',
-      badgeBg: 'bg-blue-50',
-      badgeText: 'text-blue-600',
-      borderHighlight: 'border-blue-500/30 bg-blue-50/30',
-      defaultDateStr: d1.dateStr,
-    },
-    {
-      id: 'amanha',
-      title: d2.formattedFull,
-      dotColor: 'bg-indigo-600',
-      badgeBg: 'bg-indigo-50',
-      badgeText: 'text-indigo-600',
-      defaultDateStr: d2.dateStr,
-    },
-    {
-      id: 'dia_3',
-      title: d3.formattedFull,
-      dotColor: 'bg-purple-600',
-      badgeBg: 'bg-purple-50',
-      badgeText: 'text-purple-600',
-      defaultDateStr: d3.dateStr,
-    },
-    {
-      id: 'dia_4',
-      title: d4.formattedFull,
-      dotColor: 'bg-teal-600',
-      badgeBg: 'bg-teal-50',
-      badgeText: 'text-teal-600',
-      defaultDateStr: d4.dateStr,
-    },
-    {
-      id: 'dia_5',
-      title: d5.formattedFull,
-      dotColor: 'bg-slate-600',
-      badgeBg: 'bg-slate-100',
-      badgeText: 'text-slate-600',
-      defaultDateStr: d5.dateStr,
-    },
+  const getColumnIdForIndex = (index: number): KanbanColumnId => {
+    if (index === 0) return 'hoje';
+    if (index === 1) return 'amanha';
+    if (index === 2) return 'dia_3';
+    if (index === 3) return 'dia_4';
+    if (index === 4) return 'dia_5';
+    return `dia_${index + 1}` as KanbanColumnId;
+  };
+
+  const colorPalette = [
+    { dotColor: 'bg-blue-600', badgeBg: 'bg-blue-50', badgeText: 'text-blue-600', borderHighlight: 'border-blue-500/30 bg-blue-50/30' },
+    { dotColor: 'bg-indigo-600', badgeBg: 'bg-indigo-50', badgeText: 'text-indigo-600' },
+    { dotColor: 'bg-purple-600', badgeBg: 'bg-purple-50', badgeText: 'text-purple-600' },
+    { dotColor: 'bg-teal-600', badgeBg: 'bg-teal-50', badgeText: 'text-teal-600' },
+    { dotColor: 'bg-slate-600', badgeBg: 'bg-slate-100', badgeText: 'text-slate-600' },
+
+    { dotColor: 'bg-amber-600', badgeBg: 'bg-amber-50', badgeText: 'text-amber-700' },
+    { dotColor: 'bg-emerald-600', badgeBg: 'bg-emerald-50', badgeText: 'text-emerald-700' },
+    { dotColor: 'bg-cyan-600', badgeBg: 'bg-cyan-50', badgeText: 'text-cyan-700' },
+    { dotColor: 'bg-violet-600', badgeBg: 'bg-violet-50', badgeText: 'text-violet-700' },
+    { dotColor: 'bg-fuchsia-600', badgeBg: 'bg-fuchsia-50', badgeText: 'text-fuchsia-700' },
+
+    { dotColor: 'bg-rose-600', badgeBg: 'bg-rose-50', badgeText: 'text-rose-700' },
+    { dotColor: 'bg-sky-600', badgeBg: 'bg-sky-50', badgeText: 'text-sky-700' },
+    { dotColor: 'bg-lime-600', badgeBg: 'bg-lime-50', badgeText: 'text-lime-700' },
+    { dotColor: 'bg-orange-600', badgeBg: 'bg-orange-50', badgeText: 'text-orange-700' },
+    { dotColor: 'bg-zinc-600', badgeBg: 'bg-zinc-100', badgeText: 'text-zinc-700' },
   ];
+
+  // All 15 business day column configurations
+  const allColumnsConfig = allBusinessDays.map((day, idx) => {
+    const colId = getColumnIdForIndex(idx);
+    const colors = colorPalette[idx % colorPalette.length];
+    let title = day.formattedFull;
+    if (idx === 0) title = `Hoje ${day.formattedFull}`;
+    else if (idx === 1) title = `Amanhã ${day.formattedFull}`;
+
+    return {
+      id: colId,
+      title,
+      dotColor: colors.dotColor,
+      badgeBg: colors.badgeBg,
+      badgeText: colors.badgeText,
+      borderHighlight: colors.borderHighlight,
+      defaultDateStr: day.dateStr,
+      dayNumber: idx + 1,
+    };
+  });
+
+  // Current screen / page columns (5 days per screen)
+  const pageStartIndex = (currentPage - 1) * 5;
+  const currentPageDays = allBusinessDays.slice(pageStartIndex, pageStartIndex + 5);
+  const columnsConfig = allColumnsConfig.slice(pageStartIndex, pageStartIndex + 5);
 
   // Filter active orders (excluding completed ones) and filter by search query
   const activeOrders = orders.filter((ord) => ord.executionStatus !== 'concluido' && ord.progress !== 100);
@@ -181,12 +182,29 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     );
   });
 
-  const getOrdersByColumn = (col: KanbanColumnId) => {
+  const getOrdersByColumn = (col: { id: string; defaultDateStr: string }) => {
     return filteredOrders.filter((ord) => {
-      if (ord.column === col) return true;
-      if (col === 'dia_3' && ord.column === 'proximos_7_dias') return true;
+      if (ord.productionDate && ord.productionDate.trim() === col.defaultDateStr.trim()) {
+        return true;
+      }
+      if (ord.column === col.id) {
+        return true;
+      }
+      if (col.id === 'dia_3' && ord.column === 'proximos_7_dias') {
+        return true;
+      }
       return false;
     });
+  };
+
+  const getPageOrdersCount = (pageIndex: number) => {
+    const pStart = (pageIndex - 1) * 5;
+    const pageCols = allColumnsConfig.slice(pStart, pStart + 5);
+    let count = 0;
+    pageCols.forEach((col) => {
+      count += getOrdersByColumn(col).length;
+    });
+    return count;
   };
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -206,69 +224,78 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     const id = draggedOrderId || e.dataTransfer.getData('text/plain');
     if (!id) return;
 
-    const matchedCol = columnsConfig.find((c) => c.id === targetCol);
+    const matchedCol = allColumnsConfig.find((c) => c.id === targetCol);
     const dateToAssign = matchedCol?.defaultDateStr || '';
 
-    setOrders((prev) =>
-      prev.map((ord) => {
+    setOrders((prev) => {
+      const updatedList = prev.map((ord) => {
         if (ord.id === id) {
           const isAguardando = targetCol === 'nao_planejado';
-          return {
+          const updated = {
             ...ord,
             column: targetCol,
             productionDate: isAguardando ? 'Aguardando Data' : (dateToAssign || ord.productionDate),
             executionStatus: isAguardando ? 'pendente' : ord.executionStatus,
           };
+          saveOrderToFirestore(updated).catch(() => {});
+          return updated;
         }
         return ord;
-      })
-    );
+      });
+      return updatedList;
+    });
     setDraggedOrderId(null);
   };
 
   const handleQuickMove = (id: string, targetCol: KanbanColumnId) => {
     if (isReadOnly) return;
-    const matchedCol = columnsConfig.find((c) => c.id === targetCol);
+    const matchedCol = allColumnsConfig.find((c) => c.id === targetCol);
     const dateToAssign = matchedCol?.defaultDateStr || '';
 
-    setOrders((prev) =>
-      prev.map((ord) => {
+    setOrders((prev) => {
+      const updatedList = prev.map((ord) => {
         if (ord.id === id) {
           const isAguardando = targetCol === 'nao_planejado';
-          return {
+          const updated = {
             ...ord,
             column: targetCol,
             productionDate: isAguardando ? 'Aguardando Data' : (dateToAssign || ord.productionDate),
             executionStatus: isAguardando ? 'pendente' : ord.executionStatus,
           };
+          saveOrderToFirestore(updated).catch(() => {});
+          return updated;
         }
         return ord;
-      })
-    );
+      });
+      return updatedList;
+    });
   };
 
   const handleUpdateDate = (id: string, dateStr: string) => {
     if (isReadOnly) return;
-    setOrders((prev) =>
-      prev.map((ord) => {
+    setOrders((prev) => {
+      const updatedList = prev.map((ord) => {
         if (ord.id === id) {
           const isEmptyOrAguardando = !dateStr.trim() || dateStr.toLowerCase().includes('aguardando');
-          return {
+          const updated = {
             ...ord,
             productionDate: dateStr,
             column: isEmptyOrAguardando ? 'nao_planejado' : ord.column,
             executionStatus: isEmptyOrAguardando ? 'pendente' : ord.executionStatus,
           };
+          saveOrderToFirestore(updated).catch(() => {});
+          return updated;
         }
         return ord;
-      })
-    );
+      });
+      return updatedList;
+    });
   };
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
-    const matchedCol = columnsConfig.find((c) => c.id === newColumn);
+    const matchedCol = allColumnsConfig.find((c) => c.id === newColumn);
     const initialDate = matchedCol?.defaultDateStr || '';
 
     const generatedId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ord-${String(new Date().valueOf())}`;
@@ -383,12 +410,104 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
 
 
+      {/* 15 Business Days Horizon Page Navigation Bar */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* Active Horizon Info */}
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[22px]">calendar_month</span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm text-slate-900">
+                Horizonte de Planejamento (15 Dias Úteis)
+              </h3>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <span className="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-md font-medium text-xs">
+                Dias {pageStartIndex + 1} a {pageStartIndex + 5} <span className="text-slate-400 font-normal">({currentPageDays[0]?.dateStr} a {currentPageDays[currentPageDays.length - 1]?.dateStr})</span>
+              </span>
+              <span className="bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-md font-bold text-xs">
+                {getPageOrdersCount(currentPage)} {getPageOrdersCount(currentPage) === 1 ? 'pedido agendado' : 'pedidos agendados'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Page Switcher Tabs & Previous / Next Buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+            className={`p-1.5 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-0.5 border ${
+              currentPage === 1
+                ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-blue-600 border-slate-200 shadow-2xs cursor-pointer'
+            }`}
+            title="Ver 5 dias úteis anteriores"
+          >
+            <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+            <span className="hidden sm:inline">Anterior</span>
+          </button>
+
+          <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            {[1, 2, 3].map((pageNum) => {
+              const pCount = getPageOrdersCount(pageNum);
+              const pDays = allBusinessDays.slice((pageNum - 1) * 5, pageNum * 5);
+              const startStr = pDays[0]?.dateStr.substring(0, 5) || '';
+              const endStr = pDays[pDays.length - 1]?.dateStr.substring(0, 5) || '';
+              const isSelected = currentPage === pageNum;
+
+              return (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-2 py-1 rounded-md text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                    isSelected
+                      ? 'bg-white shadow-2xs text-blue-600 border border-slate-200/80 font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title={`Tela ${pageNum}: ${startStr} até ${endStr}`}
+                >
+                  <span>Tela {pageNum}</span>
+                  <span className="text-[10px] opacity-75 font-normal hidden sm:inline">({startStr}-{endStr})</span>
+                  {pCount > 0 && (
+                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                      isSelected ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {pCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.min(3, prev + 1))}
+            disabled={currentPage === 3}
+            className={`p-1.5 sm:px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-0.5 border ${
+              currentPage === 3
+                ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-blue-600 border-slate-200 shadow-2xs cursor-pointer'
+            }`}
+            title="Ver próximos 5 dias úteis (Próxima Tela)"
+          >
+            <span className="hidden sm:inline">Próxima</span>
+            <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+          </button>
+        </div>
+      </div>
+
       {/* View Mode Switching: Kanban vs List View */}
       {viewMode === 'kanban' ? (
         /* Kanban Board */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[520px]">
           {columnsConfig.map((col) => {
-            const colOrders = getOrdersByColumn(col.id);
+            const colOrders = getOrdersByColumn(col);
             return (
               <div
                 key={col.id}
@@ -590,33 +709,21 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         /* List View (Detailed tables for each schedule section) */
         <div className="space-y-8 animate-fadeIn">
           {columnsConfig.map((col, index) => {
-            const colOrders = getOrdersByColumn(col.id);
+            const colOrders = getOrdersByColumn(col);
             const totalQty = colOrders.reduce((sum, item) => sum + (item.quantity || 0), 0);
 
-            let sectionTitle = col.title;
-            let sectionDesc = '';
-            let sectionIcon = 'list';
+            let sectionTitle = `${col.dayNumber}. Programação para ${col.title}`;
+            let sectionDesc = `Fila de ordens de produção programadas para o dia útil ${col.dayNumber} do planejamento.`;
+            let sectionIcon = 'calendar_month';
 
-            if (col.id === 'hoje') {
-              sectionTitle = `1. Produção de Hoje (${d1.formattedFull})`;
+            if (col.dayNumber === 1) {
+              sectionTitle = `1. Produção de Hoje (${col.title})`;
               sectionDesc = 'Ordens de produção ativas em corte, costura ou acabamento com meta de conclusão para hoje.';
               sectionIcon = 'today';
-            } else if (col.id === 'amanha') {
-              sectionTitle = `2. Produção do Próximo Dia (${d2.formattedFull})`;
+            } else if (col.dayNumber === 2) {
+              sectionTitle = `2. Produção do Próximo Dia (${col.title})`;
               sectionDesc = 'Planejamento e preparação de materiais para as ordens agendadas para o próximo dia útil.';
               sectionIcon = 'event_upcoming';
-            } else if (col.id === 'dia_3') {
-              sectionTitle = `3. Programação para ${d3.formattedFull}`;
-              sectionDesc = 'Fila de ordens de produção programadas para a sequência da semana.';
-              sectionIcon = 'calendar_month';
-            } else if (col.id === 'dia_4') {
-              sectionTitle = `4. Programação para ${d4.formattedFull}`;
-              sectionDesc = 'Fila de ordens de produção programadas para a sequência da semana.';
-              sectionIcon = 'calendar_month';
-            } else if (col.id === 'dia_5') {
-              sectionTitle = `5. Programação para ${d5.formattedFull}`;
-              sectionDesc = 'Fila de ordens de produção programadas para a sequência da semana.';
-              sectionIcon = 'calendar_month';
             }
 
             return (
@@ -830,7 +937,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                             <td className="px-5 py-4">
                               {isReadOnly ? (
                                 <span className="inline-block px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold max-w-[160px] truncate">
-                                  {columnsConfig.find(c => c.id === ord.column)?.title || ord.column}
+                                  {allColumnsConfig.find(c => c.id === ord.column)?.title || ord.column}
                                 </span>
                               ) : (
                                 <select
@@ -838,7 +945,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                   onChange={(e) => handleQuickMove(ord.id, e.target.value as KanbanColumnId)}
                                   className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[160px] truncate"
                                 >
-                                  {columnsConfig.map((c) => (
+                                  {allColumnsConfig.map((c) => (
                                     <option key={c.id} value={c.id}>
                                       {c.title}
                                     </option>
@@ -963,7 +1070,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                     onChange={(e) => setNewColumn(e.target.value as KanbanColumnId)}
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                   >
-                    {columnsConfig.map((c) => (
+                    {allColumnsConfig.map((c) => (
                       <option key={c.id} value={c.id} suppressHydrationWarning>
                         {c.title}
                       </option>

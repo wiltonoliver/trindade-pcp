@@ -44,7 +44,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
   const isVendasRole = userRole.includes('venda') || userRole.includes('lojista') || userRole.includes('representante');
   const isReadOnly = isVendasRole || currentUser?.permissions?.canEditProduction === false;
 
-  // Compute 5 consecutive business days (skipping weekends)
+  // Compute 15 consecutive business days (skipping weekends)
   const getBusinessDays = () => {
     const days: { id: KanbanColumnId; date: Date; dateStr: string; formattedFull: string; dayName: string }[] = [];
     const curr = new Date();
@@ -55,9 +55,13 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
       curr.setDate(curr.getDate() + 1);
     }
 
-    const colIds: KanbanColumnId[] = ['hoje', 'amanha', 'dia_3', 'dia_4', 'dia_5'];
+    const colIds: KanbanColumnId[] = [
+      'hoje', 'amanha', 'dia_3', 'dia_4', 'dia_5',
+      'dia_6', 'dia_7', 'dia_8', 'dia_9', 'dia_10',
+      'dia_11', 'dia_12', 'dia_13', 'dia_14', 'dia_15',
+    ];
 
-    while (days.length < 5) {
+    while (days.length < 15) {
       const dow = curr.getDay();
       if (dow !== 0 && dow !== 6) {
         const rawDay = curr.toLocaleDateString('pt-BR', { weekday: 'long' });
