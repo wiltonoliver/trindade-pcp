@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { OrderItem, UserProfile, AssemblyOperator, Store, KanbanColumnId, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
+import { notifyProductionDateSet } from '@/lib/notificationService';
 
 interface PendingDateOrdersProps {
   orders: OrderItem[];
@@ -175,6 +176,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
 
     setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
     saveOrderToFirestore(updatedOrder);
+    notifyProductionDateSet(updatedOrder.orderId, updatedOrder.store, assignedDate, currentUser?.name);
 
     setOrderToSchedule(null);
     setScheduleNote('');

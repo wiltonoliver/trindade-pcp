@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator } from '@/types/factory';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator, AppNotification } from '@/types/factory';
 import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_OPERATORS } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
 
@@ -26,9 +26,12 @@ import {
   subscribeOrders,
   subscribeStores,
   subscribeOperators,
+  subscribeNotifications,
   saveOrderToFirestore,
   saveStoreToFirestore,
   saveOperatorToFirestore,
+  saveNotificationToFirestore,
+  deleteNotificationFromFirestore,
 } from '@/lib/firestoreSync';
 
 export default function FactoryOpsApp() {
@@ -53,6 +56,7 @@ export default function FactoryOpsApp() {
   const [orders, setOrders] = useState<OrderItem[]>(INITIAL_ORDERS);
   const [stores, setStores] = useState<Store[]>(INITIAL_STORES);
   const [operators, setOperators] = useState<AssemblyOperator[]>(INITIAL_OPERATORS);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load from localStorage after client hydration
@@ -206,10 +210,17 @@ export default function FactoryOpsApp() {
       }
     });
 
+    const unsubNotifications = subscribeNotifications((remoteNotifs) => {
+      if (remoteNotifs) {
+        setNotifications(remoteNotifs);
+      }
+    });
+
     return () => {
       unsubOrders();
       unsubStores();
       unsubOperators();
+      unsubNotifications();
     };
   }, [isLoaded]);
 
@@ -314,7 +325,7 @@ export default function FactoryOpsApp() {
   };
 
   // Permission verification helper for tabs
-  const isTabAllowed = (tab: ActiveTab): boolean => {
+  const isTabAllowed = useCallback((tab: ActiveTab): boolean => {
     if (!currentUser || !currentUser.permissions) return true; // Default allowed if unspecified
     const p = currentUser.permissions;
 
@@ -327,6 +338,8 @@ export default function FactoryOpsApp() {
         return p.canAccessDashboard !== false;
       case 'productivity':
         return p.canAccessProductivity !== false;
+      case 'statistics':
+        return p.canAccessStatistics !== false;
       case 'completed':
         return p.canAccessCompleted !== false;
       case 'stores':
@@ -340,7 +353,7 @@ export default function FactoryOpsApp() {
       default:
         return true;
     }
-  };
+  }, [currentUser]);
 
   // Redirect user to an allowed tab if current activeTab becomes unauthorized
   useEffect(() => {
@@ -351,14 +364,14 @@ export default function FactoryOpsApp() {
         } else if (isTabAllowed('productivity')) {
           setActiveTab('productivity');
         } else {
-          const firstAllowed: ActiveTab[] = ['dashboard', 'productivity', 'order-entry', 'stores', 'reports', 'history', 'users'];
+          const firstAllowed: ActiveTab[] = ['dashboard', 'productivity', 'order-entry', 'pending-date', 'completed', 'statistics', 'stores', 'reports', 'history', 'users'];
           const fallback = firstAllowed.find((t) => isTabAllowed(t)) || 'dashboard';
           setActiveTab(fallback);
         }
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [currentUser, activeTab]);
+  }, [currentUser, activeTab, isTabAllowed]);
 
   // State for pending user access requests
   const [pendingUsersCount, setPendingUsersCount] = useState<number>(0);
@@ -411,6 +424,59 @@ export default function FactoryOpsApp() {
       (o.column === 'nao_planejado' || !o.productionDate || o.productionDate.toLowerCase().includes('aguardando'))
   ).length;
 
+  const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
+
+  const handleMarkNotificationAsRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => {
+        if (n.id === id) {
+          const updated = { ...n, read: true };
+          saveNotificationToFirestore(updated).catch(() => {});
+          return updated;
+        }
+        return n;
+      })
+    );
+  };
+
+  const handleMarkAllNotificationsAsRead = () => {
+    setNotifications((prev) =>
+      prev.map((n) => {
+        const updated = { ...n, read: true };
+        saveNotificationToFirestore(updated).catch(() => {});
+        return updated;
+      })
+    );
+  };
+
+  const handleClearAllNotifications = () => {
+    notifications.forEach((n) => {
+      deleteNotificationFromFirestore(n.id).catch(() => {});
+    });
+    setNotifications([]);
+  };
+
+  const handleNotificationClick = (n: AppNotification) => {
+    handleMarkNotificationAsRead(n.id);
+    if (
+      n.type === 'urgency_requested' ||
+      n.type === 'urgency_approved' ||
+      n.type === 'urgency_rejected' ||
+      n.type === 'order_received'
+    ) {
+      if (isTabAllowed('pending-date')) {
+        setActiveTab('pending-date');
+      } else {
+        setActiveTab('dashboard');
+      }
+    } else if (n.type === 'production_date_set' || n.type === 'order_completed') {
+      if (isTabAllowed('dashboard')) {
+        setActiveTab('dashboard');
+      }
+    }
+    setIsNotificationsOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
       {/* Persistent Sidebar */}
@@ -433,7 +499,7 @@ export default function FactoryOpsApp() {
         setSearchQuery={setSearchQuery}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
-        unreadCount={0}
+        unreadCount={unreadNotificationsCount}
         pendingUsersCount={pendingUsersCount}
         onNavigateToUsers={() => setActiveTab('users')}
         currentUser={currentUser}
@@ -599,6 +665,11 @@ export default function FactoryOpsApp() {
       <NotificationsDrawer
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
+        notifications={notifications}
+        onMarkAsRead={handleMarkNotificationAsRead}
+        onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+        onClearNotifications={handleClearAllNotifications}
+        onNotificationClick={handleNotificationClick}
       />
 
       {/* Developer Special Access Modal */}

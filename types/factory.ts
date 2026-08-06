@@ -130,3 +130,27 @@ export interface UserProfile {
   createdAt?: string;
   password?: string;
 }
+
+export type NotificationType =
+  | 'order_received'
+  | 'production_date_set'
+  | 'urgency_requested'
+  | 'urgency_approved'
+  | 'urgency_rejected'
+  | 'order_completed'
+  | 'user_pending'
+  | 'system';
+
+export interface AppNotification {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  timestamp: number;
+  type: NotificationType;
+  read?: boolean;
+  orderId?: string;
+  storeName?: string;
+  actor?: string;
+}
+

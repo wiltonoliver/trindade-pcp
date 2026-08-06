@@ -29,8 +29,11 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: true,
       canManageUsers: true,
       canAccessOrderEntry: true,
+      canAccessPendingDate: true,
       canAccessDashboard: true,
+      canAccessCompleted: true,
       canAccessProductivity: true,
+      canAccessStatistics: true,
       canAccessStores: true,
       canAccessUsers: true,
       canAccessReports: true,
@@ -53,8 +56,11 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: true,
       canManageUsers: true,
       canAccessOrderEntry: true,
+      canAccessPendingDate: true,
       canAccessDashboard: true,
+      canAccessCompleted: true,
       canAccessProductivity: true,
+      canAccessStatistics: true,
       canAccessStores: true,
       canAccessUsers: true,
       canAccessReports: true,
@@ -77,8 +83,11 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: true,
       canManageUsers: false,
       canAccessOrderEntry: true,
+      canAccessPendingDate: true,
       canAccessDashboard: true,
+      canAccessCompleted: true,
       canAccessProductivity: true,
+      canAccessStatistics: true,
       canAccessStores: true,
       canAccessUsers: false,
       canAccessReports: true,
@@ -101,8 +110,11 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: false,
       canManageUsers: false,
       canAccessOrderEntry: false,
+      canAccessPendingDate: true,
       canAccessDashboard: true,
+      canAccessCompleted: true,
       canAccessProductivity: true,
+      canAccessStatistics: true,
       canAccessStores: false,
       canAccessUsers: false,
       canAccessReports: true,
@@ -125,8 +137,11 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: false,
       canManageUsers: false,
       canAccessOrderEntry: false,
+      canAccessPendingDate: false,
       canAccessDashboard: true,
+      canAccessCompleted: true,
       canAccessProductivity: true,
+      canAccessStatistics: false,
       canAccessStores: false,
       canAccessUsers: false,
       canAccessReports: false,
@@ -149,8 +164,11 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: false,
       canManageUsers: false,
       canAccessOrderEntry: false,
+      canAccessPendingDate: true,
       canAccessDashboard: true,
+      canAccessCompleted: true,
       canAccessProductivity: true,
+      canAccessStatistics: true,
       canAccessStores: false,
       canAccessUsers: false,
       canAccessReports: true,
@@ -240,8 +258,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     canManageStores: false,
     canManageUsers: false,
     canAccessOrderEntry: true,
+    canAccessPendingDate: true,
     canAccessDashboard: true,
+    canAccessCompleted: true,
     canAccessProductivity: true,
+    canAccessStatistics: true,
     canAccessStores: true,
     canAccessUsers: false,
     canAccessReports: true,
@@ -265,7 +286,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     canManageStores: true,
     canManageUsers: true,
     canAccessOrderEntry: true,
+    canAccessPendingDate: true,
     canAccessDashboard: true,
+    canAccessCompleted: true,
     canAccessProductivity: true,
     canAccessStatistics: true,
     canAccessStores: true,
@@ -1054,6 +1077,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                         </div>
                       </div>
 
+                      {/* Page: Aguardando Data */}
+                      <div
+                        onClick={() => user.id && handleTogglePermission(user.id, 'canAccessPendingDate')}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          perms.canAccessPendingDate !== false
+                            ? 'bg-blue-50/80 border-blue-200 text-blue-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="material-symbols-outlined text-[18px]">pending_actions</span>
+                          <span className="text-xs font-bold truncate">Aguardando Data</span>
+                        </div>
+                        <div
+                          className={`w-8 h-4 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                            perms.canAccessPendingDate !== false ? 'bg-blue-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                              perms.canAccessPendingDate !== false ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
                       {/* Page: Painel de Planejamento */}
                       <div
                         onClick={() => user.id && handleTogglePermission(user.id, 'canAccessDashboard')}
@@ -1075,6 +1124,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           <div
                             className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
                               perms.canAccessDashboard !== false ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Page: Pedidos Concluídos */}
+                      <div
+                        onClick={() => user.id && handleTogglePermission(user.id, 'canAccessCompleted')}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          perms.canAccessCompleted !== false
+                            ? 'bg-blue-50/80 border-blue-200 text-blue-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="material-symbols-outlined text-[18px]">verified</span>
+                          <span className="text-xs font-bold truncate">Pedidos Concluídos</span>
+                        </div>
+                        <div
+                          className={`w-8 h-4 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                            perms.canAccessCompleted !== false ? 'bg-blue-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                              perms.canAccessCompleted !== false ? 'translate-x-4' : 'translate-x-0'
                             }`}
                           />
                         </div>
@@ -1895,11 +1970,31 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
                     <input
                       type="checkbox"
+                      checked={newPermissions.canAccessPendingDate !== false}
+                      onChange={(e) => setNewPermissions({ ...newPermissions, canAccessPendingDate: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>Aguardando Data</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
                       checked={newPermissions.canAccessDashboard !== false}
                       onChange={(e) => setNewPermissions({ ...newPermissions, canAccessDashboard: e.target.checked })}
                       className="rounded text-emerald-600 focus:ring-emerald-500"
                     />
                     <span>Planejamento</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canAccessCompleted !== false}
+                      onChange={(e) => setNewPermissions({ ...newPermissions, canAccessCompleted: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>Pedidos Concluídos</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
@@ -2110,11 +2205,31 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
                     <input
                       type="checkbox"
+                      checked={approvePermissions.canAccessPendingDate !== false}
+                      onChange={(e) => setApprovePermissions({ ...approvePermissions, canAccessPendingDate: e.target.checked })}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Aguardando Data</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
                       checked={approvePermissions.canAccessDashboard !== false}
                       onChange={(e) => setApprovePermissions({ ...approvePermissions, canAccessDashboard: e.target.checked })}
                       className="rounded text-amber-600 focus:ring-amber-500"
                     />
                     <span>Planejamento</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={approvePermissions.canAccessCompleted !== false}
+                      onChange={(e) => setApprovePermissions({ ...approvePermissions, canAccessCompleted: e.target.checked })}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Pedidos Concluídos</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">

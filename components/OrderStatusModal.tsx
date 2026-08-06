@@ -4,6 +4,12 @@ import React, { useState, useMemo } from 'react';
 import { OrderItem, ExecutionStatus, OrderStatusHistoryLog, UserProfile, UrgencyRequest } from '@/types/factory';
 import { sanitizeUnit } from '@/lib/utils';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
+import {
+  notifyUrgencyRequested,
+  notifyUrgencyApproved,
+  notifyUrgencyRejected,
+  notifyOrderCompleted,
+} from '@/lib/notificationService';
 
 interface OrderStatusModalProps {
   order: OrderItem | null;
@@ -159,6 +165,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     onUpdateOrder(updatedOrder);
     saveOrderToFirestore(updatedOrder);
+    notifyUrgencyRequested(order.orderId, order.store, authorName, urgencyReasonText.trim());
     setShowUrgencyForm(false);
     setUrgencyReasonText('');
   };
@@ -195,6 +202,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     onUpdateOrder(updatedOrder);
     saveOrderToFirestore(updatedOrder);
+    notifyUrgencyApproved(order.orderId, order.store, managerName);
   };
 
   const handleRejectUrgency = () => {
@@ -229,6 +237,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     onUpdateOrder(updatedOrder);
     saveOrderToFirestore(updatedOrder);
+    notifyUrgencyRejected(order.orderId, order.store, managerName, rejectionReason);
     setShowRejectionInput(false);
     setManagerRejectionNote('');
   };

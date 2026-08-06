@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { OrderItem, ActivityLog, Store } from '@/types/factory';
 import { INITIAL_ACTIVITY_LOGS, INITIAL_STORES } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
+import { notifyOrderReceived } from '@/lib/notificationService';
 
 interface OrderEntryProps {
   onAddOrdersToPlanning: (newOrders: OrderItem[]) => void;
@@ -181,6 +182,12 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
     });
 
     onAddOrdersToPlanning(newItems);
+
+    // Trigger automatic notifications for new orders received
+    newItems.forEach((item) => {
+      notifyOrderReceived(item.orderId, item.store, item.itemDescription);
+    });
+
     setEmailText('');
     setExtractedOrders([]);
     setAiSummary(null);

@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { OrderItem, Store, AssemblyOperator, UserProfile } from '@/types/factory';
+import { OrderItem, Store, AssemblyOperator, UserProfile, AppNotification } from '@/types/factory';
 
 /**
  * Escuta em tempo real a coleção de Pedidos no Firestore
@@ -208,4 +208,53 @@ export const deleteUserFromFirestore = async (userId: string) => {
     console.error('Erro ao remover usuário do Firestore:', error);
   }
 };
+
+/**
+ * Escuta em tempo real a coleção de Notificações no Firestore
+ */
+export const subscribeNotifications = (onUpdate: (notifications: AppNotification[]) => void) => {
+  const notifsRef = collection(db, 'notifications');
+  return onSnapshot(
+    notifsRef,
+    (snapshot) => {
+      const list: AppNotification[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as AppNotification);
+      });
+      // Sort newest first
+      list.sort((a, b) => b.timestamp - a.timestamp);
+      onUpdate(list);
+    },
+    (err) => {
+      console.error('Erro no ouvinte de Notificações do Firestore:', err);
+    }
+  );
+};
+
+/**
+ * Salva uma notificação no Firestore
+ */
+export const saveNotificationToFirestore = async (notification: AppNotification) => {
+  if (!notification.id) return;
+  try {
+    const clean = sanitizeForFirestore(notification);
+    const docRef = doc(db, 'notifications', notification.id);
+    await setDoc(docRef, clean, { merge: true });
+  } catch (error) {
+    console.error('Erro ao salvar notificação no Firestore:', error);
+  }
+};
+
+/**
+ * Remove uma notificação específica do Firestore
+ */
+export const deleteNotificationFromFirestore = async (notificationId: string) => {
+  if (!notificationId) return;
+  try {
+    await deleteDoc(doc(db, 'notifications', notificationId));
+  } catch (error) {
+    console.error('Erro ao remover notificação do Firestore:', error);
+  }
+};
+
 

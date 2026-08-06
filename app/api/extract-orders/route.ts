@@ -217,7 +217,7 @@ REGRA CRÍTICA DE EXTRAÇÃO:
 - Se o campo "deliveryDate" não for citado no texto, atribua o valor "${deliveryDate || ""}".`;
 
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.6-flash",
           contents: prompt,
           config: {
             systemInstruction:
