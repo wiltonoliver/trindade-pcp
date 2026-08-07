@@ -91,6 +91,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       permissionKey: 'canAccessUsers' as keyof UserPermissions,
     },
     {
+      id: 'labels' as ActiveTab,
+      label: 'Etiquetas Zebra ZD220',
+      icon: 'qr_code_2',
+      badge: null,
+      permissionKey: 'canAccessLabels' as keyof UserPermissions,
+    },
+    {
       id: 'reports' as ActiveTab,
       label: 'Relatórios & Impressão',
       icon: 'print',

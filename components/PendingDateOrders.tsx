@@ -568,10 +568,10 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
 
       {/* Modal: Agendar Data de Produção */}
       {orderToSchedule && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5 animate-scaleUp">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 z-50 animate-fadeIn overflow-hidden">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col p-5 sm:p-6 shadow-2xl border border-slate-100 my-auto animate-scaleUp overflow-hidden">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center font-bold shrink-0">
                   <span className="material-symbols-outlined text-xl">event</span>
@@ -590,73 +590,76 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
               </button>
             </div>
 
-            {/* Order Item Details summary */}
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-1">
-              <p className="font-bold text-slate-900">{orderToSchedule.itemDescription}</p>
-              <p className="text-slate-500 font-medium">Quantidade: <strong className="text-slate-800">{orderToSchedule.quantity} peças</strong></p>
-            </div>
+            {/* Scrollable Modal Content Body */}
+            <div className="flex-1 overflow-y-auto py-3 pr-1 space-y-4 my-1">
+              {/* Order Item Details summary */}
+              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-1">
+                <p className="font-bold text-slate-900">{orderToSchedule.itemDescription}</p>
+                <p className="text-slate-500 font-medium">Quantidade: <strong className="text-slate-800">{orderToSchedule.quantity} peças</strong></p>
+              </div>
 
-            {/* Select Target Business Day */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">
-                Selecione um Dia da Programação (ou Data Personalizada):
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {businessDays.map((day) => {
-                  const isSelected = selectedTargetColumn === day.id && !customDate;
-                  return (
-                    <button
-                      key={day.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedTargetColumn(day.id);
-                        setCustomDate('');
-                      }}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 text-blue-900 font-bold'
-                          : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700 font-medium'
-                      }`}
-                    >
-                      <p className="text-[10px] uppercase font-bold text-slate-400">{day.dayName}</p>
-                      <p className="text-xs text-slate-900 font-bold">{day.dateStr}</p>
-                    </button>
-                  );
-                })}
+              {/* Select Target Business Day */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700">
+                  Selecione um Dia da Programação (ou Data Personalizada):
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {businessDays.map((day) => {
+                    const isSelected = selectedTargetColumn === day.id && !customDate;
+                    return (
+                      <button
+                        key={day.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTargetColumn(day.id);
+                          setCustomDate('');
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20 text-blue-900 font-bold'
+                            : 'bg-white border-slate-200 hover:border-slate-300 text-slate-700 font-medium'
+                        }`}
+                      >
+                        <p className="text-[10px] uppercase font-bold text-slate-400">{day.dayName}</p>
+                        <p className="text-xs text-slate-900 font-bold">{day.dateStr}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Date Input Option */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Ou escolha outra data específica no calendário:
+                </label>
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(e) => {
+                    setCustomDate(e.target.value);
+                  }}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                />
+              </div>
+
+              {/* Note Input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700">
+                  Observação do Agendamento (opcional):
+                </label>
+                <input
+                  type="text"
+                  value={scheduleNote}
+                  onChange={(e) => setScheduleNote(e.target.value)}
+                  placeholder="Ex: Liberado pela loja, prioridade de montagem..."
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                />
               </div>
             </div>
 
-            {/* Custom Date Input Option */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-700">
-                Ou escolha outra data específica no calendário:
-              </label>
-              <input
-                type="date"
-                value={customDate}
-                onChange={(e) => {
-                  setCustomDate(e.target.value);
-                }}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-              />
-            </div>
-
-            {/* Note Input */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-700">
-                Observação do Agendamento (opcional):
-              </label>
-              <input
-                type="text"
-                value={scheduleNote}
-                onChange={(e) => setScheduleNote(e.target.value)}
-                placeholder="Ex: Liberado pela loja, prioridade de montagem..."
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-              />
-            </div>
-
             {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
               <button
                 type="button"
                 onClick={() => setOrderToSchedule(null)}

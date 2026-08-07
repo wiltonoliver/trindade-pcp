@@ -15,6 +15,7 @@ import { ReplanningHistory } from '@/components/ReplanningHistory';
 import { StoreManagement } from '@/components/StoreManagement';
 import { UserManagement } from '@/components/UserManagement';
 import { ReportsPage } from '@/components/ReportsPage';
+import { LabelGenerator } from '@/components/LabelGenerator';
 import { CompletedOrders } from '@/components/CompletedOrders';
 import { PendingDateOrders } from '@/components/PendingDateOrders';
 
@@ -43,6 +44,7 @@ export default function FactoryOpsApp() {
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedStoreForOrder, setSelectedStoreForOrder] = useState<string | undefined>(undefined);
+  const [selectedOrderForLabel, setSelectedOrderForLabel] = useState<string | null>(null);
 
   // User Profile state with default fallback
   const [currentUser, setCurrentUser] = useState<UserProfile | null>({
@@ -348,6 +350,8 @@ export default function FactoryOpsApp() {
         return p.canAccessUsers !== false;
       case 'reports':
         return p.canAccessReports !== false;
+      case 'labels':
+        return p.canAccessLabels !== false;
       case 'history':
         return p.canAccessHistory !== false;
       default:
@@ -598,6 +602,16 @@ export default function FactoryOpsApp() {
             onOpenLoginModal={() => setIsLoginOpen(true)}
             operators={operators}
             setOperators={setOperators}
+          />
+        )}
+
+        {activeTab === 'labels' && isTabAllowed('labels') && (
+          <LabelGenerator
+            orders={orders}
+            operators={operators}
+            stores={stores}
+            preselectedOrderId={selectedOrderForLabel}
+            onClearPreselectedOrder={() => setSelectedOrderForLabel(null)}
           />
         )}
 

@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { OrderItem, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
+import { BatchLabelModal } from './BatchLabelModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
 
 interface CompletedOrdersProps {
@@ -20,6 +21,12 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 }) => {
   const [localSearch, setLocalSearch] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('ALL');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('ALL');
+  const [selectedOrderIdsForBatch, setSelectedOrderIdsForBatch] = useState<string[]>([]);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
+  const [batchModalItems, setBatchModalItems] = useState<OrderItem[]>([]);
+  const [batchModalTitleDate, setBatchModalTitleDate] = useState<string>('');
+
   const [selectedOrderForModal, setSelectedOrderForModal] = useState<OrderItem | null>(null);
   const [orderToRemake, setOrderToRemake] = useState<OrderItem | null>(null);
   const [remakeNote, setRemakeNote] = useState('');
@@ -32,19 +39,63 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
     );
   }, [orders]);
 
+  // Helper to format completion date from history
+  const getCompletionDate = (ord: OrderItem) => {
+    const log = ord.statusHistory?.find((h) => h.status === 'concluido');
+    if (log && log.timestamp) return log.timestamp;
+    if (ord.productionDate && ord.productionDate !== 'Aguardando Data') return ord.productionDate;
+    return '100% Concluído';
+  };
+
+  // Helper to extract clean DD/MM/YYYY date
+  const getCleanDateOnly = (ord: OrderItem) => {
+    const log = ord.statusHistory?.find((h) => h.status === 'concluido');
+    if (log && log.timestamp) {
+      const match = log.timestamp.match(/\d{2}\/\d{2}\/\d{4}/);
+      if (match) return match[0];
+    }
+    if (ord.productionDate && ord.productionDate.includes('/')) {
+      const match = ord.productionDate.match(/\d{2}\/\d{2}\/\d{4}/);
+      if (match) return match[0];
+    }
+    return '';
+  };
+
+  const todayStr = useMemo(() => new Date().toLocaleDateString('pt-BR'), []);
+
+  // Extract unique completion dates for dropdown
+  const availableDates = useMemo(() => {
+    const datesSet = new Set<string>();
+    completedOrders.forEach((ord) => {
+      const d = getCleanDateOnly(ord);
+      if (d) datesSet.add(d);
+    });
+    return Array.from(datesSet).sort().reverse();
+  }, [completedOrders]);
+
   // Extract unique store names for filter dropdown
   const storeOptions = useMemo(() => {
     const stores = Array.from(new Set(completedOrders.map((o) => o.store))).filter(Boolean);
     return stores.sort();
   }, [completedOrders]);
 
-  // Apply search & store filters
+  // Apply search, store & date filters
   const filteredCompletedOrders = useMemo(() => {
     const query = (localSearch || externalSearchQuery).toLowerCase().trim();
     return completedOrders.filter((ord) => {
       // Store filter
       if (selectedStore !== 'ALL' && ord.store !== selectedStore) {
         return false;
+      }
+
+      // Date filter
+      if (selectedDateFilter !== 'ALL') {
+        const cleanD = getCleanDateOnly(ord);
+        if (selectedDateFilter === 'TODAY') {
+          if (cleanD !== todayStr && !getCompletionDate(ord).includes(todayStr)) return false;
+        } else if (cleanD !== selectedDateFilter) {
+          return false;
+        }
       }
 
       // Search query filter (OP ID, Store, Item Description, Operator Code/Name)
@@ -60,7 +111,32 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
       return true;
     });
-  }, [completedOrders, localSearch, externalSearchQuery, selectedStore]);
+  }, [completedOrders, localSearch, externalSearchQuery, selectedStore, selectedDateFilter, todayStr]);
+
+  // Checkbox Selection Logic
+  const handleToggleSelectOrder = (id: string) => {
+    setSelectedOrderIdsForBatch((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAllFiltered = () => {
+    const filteredIds = filteredCompletedOrders.map((o) => o.id);
+    const allSelected = filteredIds.every((id) => selectedOrderIdsForBatch.includes(id));
+    if (allSelected) {
+      setSelectedOrderIdsForBatch((prev) => prev.filter((id) => !filteredIds.includes(id)));
+    } else {
+      setSelectedOrderIdsForBatch((prev) => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
+  // Open Batch Label Printing Modal
+  const handleOpenBatchLabels = (items: OrderItem[], dateLabel: string) => {
+    if (items.length === 0) return;
+    setBatchModalItems(items);
+    setBatchModalTitleDate(dateLabel);
+    setIsBatchModalOpen(true);
+  };
 
   // Handle order updates (e.g., if status is reverted or edited in modal)
   const handleUpdateOrder = (updatedOrder: OrderItem) => {
@@ -118,14 +194,6 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
     setOrders((prev) => prev.filter((o) => o.id !== targetId));
     await deleteOrderFromFirestore(targetId);
     setOrderToDelete(null);
-  };
-
-  // Helper to format completion date from history
-  const getCompletionDate = (ord: OrderItem) => {
-    const log = ord.statusHistory?.find((h) => h.status === 'concluido');
-    if (log && log.timestamp) return log.timestamp;
-    if (ord.productionDate && ord.productionDate !== 'Aguardando Data') return ord.productionDate;
-    return '100% Concluído';
   };
 
   return (
@@ -215,6 +283,28 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
           )}
         </div>
 
+        {/* Date Filter */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-bold text-slate-500 whitespace-nowrap hidden sm:inline">Data Conclusão:</span>
+          <select
+            value={selectedDateFilter}
+            onChange={(e) => setSelectedDateFilter(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+          >
+            <option value="ALL">Todas as Datas ({completedOrders.length})</option>
+            <option value="TODAY">Hoje — {todayStr}</option>
+            {availableDates.map((dateStr) => {
+              if (dateStr === todayStr) return null;
+              const count = completedOrders.filter((o) => getCleanDateOnly(o) === dateStr).length;
+              return (
+                <option key={dateStr} value={dateStr}>
+                  {dateStr} ({count} peças)
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
         {/* Store selector */}
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-xs font-bold text-slate-500 whitespace-nowrap hidden sm:inline">Filtrar Loja:</span>
@@ -236,6 +326,66 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
         </div>
       </div>
 
+      {/* Batch Action Toolbar */}
+      <div className="bg-gradient-to-r from-blue-900 to-slate-900 p-4 rounded-2xl text-white shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-400/30 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-2xl text-blue-300">qr_code_2</span>
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-white flex items-center gap-2">
+              <span>Impressão em Lote de Etiquetas Zebra</span>
+              {selectedOrderIdsForBatch.length > 0 && (
+                <span className="bg-blue-500 text-white text-[11px] px-2 py-0.5 rounded-full font-bold">
+                  {selectedOrderIdsForBatch.length} selecionadas
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-slate-300 font-medium">
+              Gere de uma só vez todas as etiquetas térmicas (100x30mm) das peças concluídas no dia.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          {selectedOrderIdsForBatch.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                const selectedItems = completedOrders.filter((o) =>
+                  selectedOrderIdsForBatch.includes(o.id)
+                );
+                handleOpenBatchLabels(selectedItems, `${selectedOrderIdsForBatch.length} peças selecionadas`);
+              }}
+              className="w-full sm:w-auto px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-lg">print</span>
+              <span>Imprimir Selecionadas ({selectedOrderIdsForBatch.length})</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={filteredCompletedOrders.length === 0}
+              onClick={() => {
+                const dateLabel =
+                  selectedDateFilter === 'TODAY'
+                    ? `Hoje (${todayStr})`
+                    : selectedDateFilter !== 'ALL'
+                    ? `Data ${selectedDateFilter}`
+                    : 'Todas as Peças Exibidas';
+                handleOpenBatchLabels(filteredCompletedOrders, dateLabel);
+              }}
+              className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl text-xs transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined text-lg">print</span>
+              <span>
+                Imprimir Etiquetas do Dia ({filteredCompletedOrders.length} peças)
+              </span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Spreadsheet-like Table (`Planilha`) */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
@@ -243,9 +393,21 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
             <span className="material-symbols-outlined text-base text-emerald-600">table_view</span>
             <span>Planilha de Pedidos Finalizados</span>
           </h2>
-          <span className="text-xs text-slate-400 font-medium">
-            Clique em qualquer pedido para abrir o histórico detalhado
-          </span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleToggleSelectAllFiltered}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+            >
+              {filteredCompletedOrders.length > 0 &&
+              filteredCompletedOrders.every((o) => selectedOrderIdsForBatch.includes(o.id))
+                ? 'Desmarcar Todos'
+                : 'Marcar Todos Exibidos'}
+            </button>
+            <span className="text-xs text-slate-400 font-medium hidden md:inline">
+              Clique em qualquer pedido para abrir o histórico detalhado
+            </span>
+          </div>
         </div>
 
         {filteredCompletedOrders.length === 0 ? (
@@ -259,14 +421,15 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                 ? 'Assim que os gestores marcarem os pedidos como 100% concluídos, eles serão listados automaticamente nesta página.'
                 : 'Nenhum pedido atende aos filtros de busca informados.'}
             </p>
-            {(localSearch || selectedStore !== 'ALL') && (
+            {(localSearch || selectedStore !== 'ALL' || selectedDateFilter !== 'ALL') && (
               <button
                 type="button"
                 onClick={() => {
                   setLocalSearch('');
                   setSelectedStore('ALL');
+                  setSelectedDateFilter('ALL');
                 }}
-                className="mt-4 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors"
+                className="mt-4 px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Limpar Filtros
               </button>
@@ -277,28 +440,53 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-100/80 text-slate-600 text-[11px] font-extrabold uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-3.5 px-5">OP / N° Pedido</th>
-                  <th className="py-3.5 px-5">Loja / Cliente</th>
-                  <th className="py-3.5 px-5">Descrição da Esquadria / Item</th>
-                  <th className="py-3.5 px-5 text-center">Qtd.</th>
-                  <th className="py-3.5 px-5">Montador Responsável</th>
-                  <th className="py-3.5 px-5">Data de Conclusão</th>
-                  <th className="py-3.5 px-5 text-center">Status / Urgência</th>
-                  <th className="py-3.5 px-5 text-right">Ações</th>
+                  <th className="py-3.5 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={
+                        filteredCompletedOrders.length > 0 &&
+                        filteredCompletedOrders.every((o) => selectedOrderIdsForBatch.includes(o.id))
+                      }
+                      onChange={handleToggleSelectAllFiltered}
+                      className="w-4 h-4 text-blue-600 rounded-xs border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      title="Marcar / desmarcar todos"
+                    />
+                  </th>
+                  <th className="py-3.5 px-4">OP / N° Pedido</th>
+                  <th className="py-3.5 px-4">Loja / Cliente</th>
+                  <th className="py-3.5 px-4">Descrição da Esquadria / Item</th>
+                  <th className="py-3.5 px-4 text-center">Qtd.</th>
+                  <th className="py-3.5 px-4">Montador Responsável</th>
+                  <th className="py-3.5 px-4">Data de Conclusão</th>
+                  <th className="py-3.5 px-4 text-center">Status</th>
+                  <th className="py-3.5 px-4 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredCompletedOrders.map((ord) => {
                   const completionDate = getCompletionDate(ord);
+                  const isChecked = selectedOrderIdsForBatch.includes(ord.id);
 
                   return (
                     <tr
                       key={ord.id}
                       onClick={() => setSelectedOrderForModal(ord)}
-                      className="hover:bg-emerald-50/40 transition-colors cursor-pointer group"
+                      className={`hover:bg-emerald-50/40 transition-colors cursor-pointer group ${
+                        isChecked ? 'bg-blue-50/30' : ''
+                      }`}
                     >
+                      {/* Checkbox */}
+                      <td className="py-4 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleSelectOrder(ord.id)}
+                          className="w-4 h-4 text-blue-600 rounded-xs border-slate-300 focus:ring-blue-500 cursor-pointer"
+                        />
+                      </td>
+
                       {/* OP / N° Pedido */}
-                      <td className="py-4 px-5 font-bold text-slate-900 whitespace-nowrap">
+                      <td className="py-4 px-4 font-bold text-slate-900 whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5 text-slate-800 text-xs font-mono font-semibold">
                           <span className="material-symbols-outlined text-[14px] text-slate-400">task_alt</span>
                           <span>OP #{ord.orderId}</span>
@@ -306,7 +494,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                       </td>
 
                       {/* Loja / Cliente */}
-                      <td className="py-4 px-5">
+                      <td className="py-4 px-4">
                         <span className="inline-flex items-center gap-1.5 text-slate-700 font-medium text-xs">
                           <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
                           <span>{ord.store}</span>
@@ -314,21 +502,21 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                       </td>
 
                       {/* Descrição da Esquadria */}
-                      <td className="py-4 px-5 font-medium text-slate-800 max-w-xs">
+                      <td className="py-4 px-4 font-medium text-slate-800 max-w-xs">
                         <div className="line-clamp-2" title={ord.itemDescription}>
                           {ord.itemDescription}
                         </div>
                       </td>
 
                       {/* Quantidade */}
-                      <td className="py-4 px-5 text-center whitespace-nowrap">
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
                         <span className="font-medium text-slate-700 text-xs">
                           {ord.quantity} {ord.unit || 'un'}
                         </span>
                       </td>
 
                       {/* Montador Responsável */}
-                      <td className="py-4 px-5 whitespace-nowrap">
+                      <td className="py-4 px-4 whitespace-nowrap">
                         {ord.assignedOperatorName ? (
                           <div className="inline-flex items-center gap-1.5 text-slate-700 font-medium text-xs">
                             <span className="material-symbols-outlined text-slate-400 text-sm">engineering</span>
@@ -342,7 +530,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                       </td>
 
                       {/* Data de Conclusão */}
-                      <td className="py-4 px-5 whitespace-nowrap font-medium text-slate-600">
+                      <td className="py-4 px-4 whitespace-nowrap font-medium text-slate-600">
                         <div className="flex items-center gap-1.5 text-xs text-slate-600">
                           <span className="material-symbols-outlined text-sm text-slate-400">event_available</span>
                           <span>{completionDate}</span>
@@ -350,7 +538,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                       </td>
 
                       {/* Status & Urgência */}
-                      <td className="py-4 px-5 text-center whitespace-nowrap">
+                      <td className="py-4 px-4 text-center whitespace-nowrap">
                         <div className="flex flex-col items-center gap-0.5">
                           <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-medium">
                             <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
@@ -366,8 +554,22 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-4 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Imprimir Etiqueta da Peça */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenBatchLabels([ord], `OP #${ord.orderId}`);
+                            }}
+                            title="Imprimir etiqueta Zebra desta peça"
+                            className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200/80 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                          >
+                            <span className="material-symbols-outlined text-sm">qr_code_2</span>
+                            <span>Etiqueta</span>
+                          </button>
+
                           {/* Voltar para Refazer */}
                           <button
                             type="button"
@@ -545,6 +747,18 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
           order={selectedOrderForModal}
           onUpdateOrder={handleUpdateOrder}
           currentUser={currentUser}
+        />
+      )}
+
+      {/* Batch Label Generator Modal */}
+      {isBatchModalOpen && (
+        <BatchLabelModal
+          orders={batchModalItems}
+          titleDate={batchModalTitleDate}
+          onClose={() => {
+            setIsBatchModalOpen(false);
+            setBatchModalItems([]);
+          }}
         />
       )}
     </div>
