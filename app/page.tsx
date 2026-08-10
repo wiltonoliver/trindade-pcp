@@ -16,6 +16,7 @@ import { StoreManagement } from '@/components/StoreManagement';
 import { UserManagement } from '@/components/UserManagement';
 import { ReportsPage } from '@/components/ReportsPage';
 import { LabelGenerator } from '@/components/LabelGenerator';
+import { ExpeditionScreen } from '@/components/ExpeditionScreen';
 import { CompletedOrders } from '@/components/CompletedOrders';
 import { PendingDateOrders } from '@/components/PendingDateOrders';
 
@@ -352,6 +353,8 @@ export default function FactoryOpsApp() {
         return p.canAccessReports !== false;
       case 'labels':
         return p.canAccessLabels !== false;
+      case 'expedition':
+        return p.canAccessExpedition !== false;
       case 'history':
         return p.canAccessHistory !== false;
       default:
@@ -612,6 +615,16 @@ export default function FactoryOpsApp() {
             stores={stores}
             preselectedOrderId={selectedOrderForLabel}
             onClearPreselectedOrder={() => setSelectedOrderForLabel(null)}
+          />
+        )}
+
+        {activeTab === 'expedition' && isTabAllowed('expedition') && (
+          <ExpeditionScreen
+            orders={orders}
+            setOrders={setOrders}
+            currentUser={currentUser}
+            operators={operators}
+            stores={stores}
           />
         )}
 

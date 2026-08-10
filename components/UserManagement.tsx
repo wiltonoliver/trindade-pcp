@@ -1289,6 +1289,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                         </div>
                       </div>
 
+                      {/* Page: Expedição & Baixa */}
+                      <div
+                        onClick={() => user.id && handleTogglePermission(user.id, 'canAccessExpedition')}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          perms.canAccessExpedition !== false
+                            ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="material-symbols-outlined text-[18px]">local_shipping</span>
+                          <span className="text-xs font-bold truncate">Expedição & Baixa</span>
+                        </div>
+                        <div
+                          className={`w-8 h-4 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                            perms.canAccessExpedition !== false ? 'bg-emerald-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                              perms.canAccessExpedition !== false ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
                       {/* Page: Relatórios & Impressão */}
                       <div
                         onClick={() => user.id && handleTogglePermission(user.id, 'canAccessReports')}
@@ -1898,7 +1924,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                     onChange={(e) => {
                       const role = e.target.value;
                       setNewRole(role);
-                      if (role === 'DIRETORIA' || role === 'GESTÃO INDUSTRIAL' || role === 'GERENTE DE OPERAÇÕES') {
+                      if (role === 'DIRETORIA' || role === 'EXPEDIÇÃO' || role === 'GERENTE DE OPERAÇÕES') {
                         setNewPermissions({
                           canEditProduction: true,
                           canCreateOrder: true,
@@ -1951,7 +1977,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                   >
                     <option value="DIRETORIA">DIRETORIA</option>
-                    <option value="GESTÃO INDUSTRIAL">GESTÃO INDUSTRIAL</option>
+                    <option value="EXPEDIÇÃO">EXPEDIÇÃO</option>
                     <option value="GERENTE DE OPERAÇÕES">GERENTE DE OPERAÇÕES</option>
                     <option value="SUPERVISOR DE PRODUÇÃO">SUPERVISOR DE PRODUÇÃO</option>
                     <option value="ANALISTA DE PCP">ANALISTA DE PCP</option>

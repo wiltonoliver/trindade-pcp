@@ -224,69 +224,121 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
     const showClientInBody = Boolean(companyHeader && clientName);
 
     if (selectedPreset === '100x30') {
-      // 100mm x 30mm (Zebra Standard 10x3 cm) - High legibility layout with strict overflow prevention
+      // 100mm x 30mm (Zebra Standard 10x3 cm) - Replicated exact attachment visual model
+      const formatPtBrDate = (dateStr?: string) => {
+        if (!dateStr) return new Date().toLocaleDateString('pt-BR');
+        const cleanStr = dateStr.trim();
+        if (cleanStr.includes('-')) {
+          const parts = cleanStr.split('-');
+          if (parts.length === 3 && parts[0].length === 4) {
+            return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+          }
+        }
+        return cleanStr;
+      };
+
+      const formattedDate = formatPtBrDate(productionDate);
+      const cleanOpNum = (opNumber || '').replace(/#/g, '').trim();
+      const cleanStore = (clientName || '').trim().toUpperCase();
+      const combinedOpStore = (cleanOpNum || cleanStore) ? `${cleanOpNum}${cleanStore}` : 'BC3026';
+      const operatorDisplayName = (operatorName || 'CLEITON').trim().toUpperCase();
+      const barcodeText = barcodeValue || (opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA');
+
       return (
         <div 
-          className="w-[100mm] h-[30mm] bg-white border-2 border-black p-1 flex flex-col justify-between text-black font-sans box-border overflow-hidden select-none"
-          style={{ width: '100mm', height: '30mm', minWidth: '100mm', minHeight: '30mm', boxSizing: 'border-box', border: '2px solid black', padding: '4px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', backgroundColor: '#ffffff', color: '#000000' }}
+          className="w-[100mm] h-[30mm] bg-white border border-black p-2 flex flex-col justify-between text-black font-sans box-border overflow-hidden select-none relative"
+          style={{ 
+            width: '100mm', 
+            height: '30mm', 
+            minWidth: '100mm', 
+            minHeight: '30mm', 
+            boxSizing: 'border-box', 
+            border: '1.5px solid black', 
+            padding: '6px 10px 6px 10px', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            justifyContent: 'space-between', 
+            backgroundColor: '#ffffff', 
+            color: '#000000',
+            fontFamily: 'Arial, sans-serif'
+          }}
         >
-          {/* Header row */}
+          {/* Header Row: OP: [OPERATOR] ... [DATE] */}
           <div 
-            className="h-[6mm] flex items-center justify-between border-b-2 border-black pb-0.5 shrink-0"
-            style={{ height: '6mm', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid black', paddingBottom: '2px', flexShrink: 0 }}
+            className="flex items-center justify-between border-b border-black pb-1 shrink-0"
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              borderBottom: '2px solid black', 
+              paddingBottom: '3px', 
+              flexShrink: 0 
+            }}
           >
-            {headerTitle ? (
-              <span className="text-[12px] font-black uppercase tracking-tight truncate max-w-[68%] leading-none" style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '68%' }}>
-                {headerTitle}
-              </span>
-            ) : null}
-            <div className={`flex items-center gap-1 shrink-0 ${headerTitle ? '' : 'w-full justify-end'}`} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-              {volText && (
-                <span className="text-[9px] font-black border border-black px-1 bg-black text-white rounded-xs leading-none" style={{ fontSize: '9px', fontWeight: 900, border: '1px solid black', padding: '1px 4px', backgroundColor: 'black', color: 'white' }}>
-                  {volText}
-                </span>
-              )}
-              <span className="text-[11px] font-black bg-black text-white px-1.5 py-0.5 rounded-xs uppercase leading-none" style={{ fontSize: '11px', fontWeight: 900, backgroundColor: 'black', color: 'white', padding: '2px 6px', textTransform: 'uppercase' }}>
-                {opNumber || 'OP-0000'}
-              </span>
+            <div className="text-[13px] font-black uppercase tracking-wide" style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              OP: <span className="font-extrabold">{operatorDisplayName}</span>
+            </div>
+            <div className="text-[13px] font-black uppercase tracking-wide" style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              {formattedDate}
             </div>
           </div>
 
-          {/* Main info row */}
-          <div className="flex items-center gap-1 my-0.5 flex-1 min-h-0 overflow-hidden" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', marginBottom: '2px', flex: '1 1 0%', minHeight: 0, overflow: 'hidden' }}>
-            <div className="flex-1 min-w-0 flex flex-col justify-between h-full py-0.5 pr-1" style={{ flex: '1 1 0%', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', paddingRight: '4px' }}>
-              {showClientInBody && (
-                <div className="text-[10px] font-bold text-black leading-tight truncate" style={{ fontSize: '10px', fontWeight: 700, color: 'black', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  <strong className="text-black uppercase">CLI:</strong> <span className="font-black text-[11px] uppercase" style={{ fontWeight: 900, fontSize: '11px' }}>{clientName}</span>
-                </div>
-              )}
-              <div className="text-[13.5px] font-black leading-[1.1] text-black uppercase break-words line-clamp-2 font-sans overflow-hidden" style={{ fontSize: '13.5px', fontWeight: 900, lineHeight: 1.1, color: 'black', textTransform: 'uppercase', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                {itemDesc || 'PRODUTO / ITEM NÃO ESPECIFICADO'}
-              </div>
-              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0 text-[9.5px] font-black text-black leading-tight" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', fontSize: '9.5px', fontWeight: 900, color: 'black' }}>
-                <span>QTD: <strong style={{ fontSize: '11px', fontWeight: 900 }}>{quantity} {unit}</strong></span>
-                {operatorName && <span>| OP: <strong>{operatorName}</strong></span>}
-                {productionDate && <span>| {productionDate}</span>}
-              </div>
-            </div>
-
-            {/* Barcode column - Exactly 25mm to 28mm width */}
-            <div className="w-[28mm] flex flex-col items-center justify-center shrink-0 border-l-2 border-black pl-1 h-full my-auto" style={{ width: '28mm', minWidth: '28mm', maxWidth: '28mm', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderLeft: '2px solid black', paddingLeft: '4px', height: '100%' }}>
-              {renderBarcodeSVG(barcodeValue || opNumber || 'TRINDADE', { 
-                height: 38, 
-                className: 'h-[10mm] w-[25mm]', 
-                svgStyle: { height: '10mm', width: '25mm', maxHeight: '100%', maxWidth: '100%' },
-                textClass: 'text-[8.5px] font-mono tracking-tight font-black text-black mt-0.5 leading-none' 
+          {/* Body Row: Left Barcode + Right Big Item Code & Description */}
+          <div 
+            className="flex items-center gap-3 my-auto flex-1 min-h-0 overflow-hidden pt-1" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '12px', 
+              flex: '1 1 0%', 
+              minHeight: 0, 
+              overflow: 'hidden',
+              paddingTop: '2px'
+            }}
+          >
+            {/* Left Column: Barcode with text beneath */}
+            <div 
+              className="w-[42mm] flex flex-col items-center justify-center shrink-0" 
+              style={{ width: '42mm', minWidth: '42mm', maxWidth: '42mm', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            >
+              {renderBarcodeSVG(barcodeText, { 
+                height: 48, 
+                className: 'h-[14mm] w-[40mm]', 
+                svgStyle: { height: '14mm', width: '40mm', maxHeight: '100%', maxWidth: '100%' },
+                textClass: 'text-[9.5px] font-mono tracking-tight font-black text-black mt-0.5 leading-none uppercase' 
               })}
             </div>
-          </div>
 
-          {/* Footer row */}
-          <div className="h-[4.5mm] flex items-center justify-between border-t-2 border-black pt-0.5 text-[8.5px] font-black leading-none shrink-0" style={{ height: '4.5mm', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '2px solid black', fontSize: '8.5px', fontWeight: 900, flexShrink: 0, paddingTop: '2px' }}>
-            <span className="uppercase truncate max-w-[70%]" style={{ textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
-              {lotCode ? `LOTE: ${lotCode}` : ''} {observations ? `| ${observations}` : ''}
-            </span>
-            <span className="font-mono text-[8.5px] font-black shrink-0 ml-1" style={{ fontFamily: 'monospace', fontSize: '8.5px', fontWeight: 900, flexShrink: 0, marginLeft: '4px' }}>TRINDADE PCP</span>
+            {/* Right Column: Prominent Code & Multi-line Item Description */}
+            <div 
+              className="flex-1 min-w-0 flex flex-col justify-center h-full pl-1" 
+              style={{ flex: '1 1 0%', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}
+            >
+              {/* Product Main Code (OP+Store joined, e.g., 31458RAGUEB or BC3026) */}
+              <div 
+                className="text-[22px] font-black leading-none text-black uppercase tracking-tight" 
+                style={{ fontSize: '22px', fontWeight: 900, lineHeight: 1.0, color: '#000000', textTransform: 'uppercase', letterSpacing: '-0.02em', marginBottom: '2px' }}
+              >
+                {combinedOpStore}
+              </div>
+              
+              {/* Detailed Item Specification with auto line breaks */}
+              <div 
+                className="text-black font-black uppercase break-words whitespace-normal leading-tight" 
+                style={{ 
+                  fontSize: (itemDesc || '').length > 60 ? '8.5px' : (itemDesc || '').length > 35 ? '9.5px' : '11px', 
+                  fontWeight: 900, 
+                  lineHeight: 1.08, 
+                  color: '#000000', 
+                  textTransform: 'uppercase', 
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
+                  letterSpacing: '0.01em'
+                }}
+              >
+                {itemDesc || 'VITRO 4F S/B 100X120 S/G MODULAR BRANCO'}
+              </div>
+            </div>
           </div>
         </div>
       );

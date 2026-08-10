@@ -98,6 +98,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       permissionKey: 'canAccessLabels' as keyof UserPermissions,
     },
     {
+      id: 'expedition' as ActiveTab,
+      label: 'Expedição & Baixa',
+      icon: 'local_shipping',
+      badge: null,
+      permissionKey: 'canAccessExpedition' as keyof UserPermissions,
+    },
+    {
       id: 'reports' as ActiveTab,
       label: 'Relatórios & Impressão',
       icon: 'print',
