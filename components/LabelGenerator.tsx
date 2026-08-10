@@ -260,7 +260,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
                   <strong className="text-black uppercase">CLI:</strong> <span className="font-black text-[11px] uppercase" style={{ fontWeight: 900, fontSize: '11px' }}>{clientName}</span>
                 </div>
               )}
-              <div className="text-[11.5px] font-black leading-[1.15] text-black uppercase break-words line-clamp-2 font-sans overflow-hidden" style={{ fontSize: '11px', fontWeight: 900, lineHeight: 1.15, color: 'black', textTransform: 'uppercase', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              <div className="text-[13.5px] font-black leading-[1.1] text-black uppercase break-words line-clamp-2 font-sans overflow-hidden" style={{ fontSize: '13.5px', fontWeight: 900, lineHeight: 1.1, color: 'black', textTransform: 'uppercase', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                 {itemDesc || 'PRODUTO / ITEM NÃO ESPECIFICADO'}
               </div>
               <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0 text-[9.5px] font-black text-black leading-tight" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', fontSize: '9.5px', fontWeight: 900, color: 'black' }}>
@@ -312,7 +312,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
             <div className="text-[12px] font-bold break-words" style={{ fontSize: '12px', fontWeight: 700 }}>
               CLIENTE/LOJA: <strong className="text-[14px] font-black uppercase" style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase' }}>{clientName || 'N/A'}</strong>
             </div>
-            <div className="text-[15px] font-black uppercase leading-tight break-words whitespace-normal font-sans" style={{ fontSize: '15px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.2 }}>
+            <div className="text-[18px] font-black uppercase leading-tight break-words whitespace-normal font-sans" style={{ fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.15 }}>
               {itemDesc || 'PRODUTO'}
             </div>
             <div className="grid grid-cols-3 gap-1 text-[11px] font-bold bg-gray-100 p-1 border-2 border-black" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#f3f4f6', padding: '4px', border: '2px solid black' }}>
@@ -370,7 +370,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 
             <div className="border-b-2 border-black pb-1" style={{ borderBottom: '2px solid black', paddingBottom: '4px' }}>
               <span className="text-[11px] font-extrabold uppercase text-gray-700" style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#374151' }}>DESCRIÇÃO DO ITEM</span>
-              <div className="text-[17px] font-black uppercase leading-snug" style={{ fontSize: '17px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.3 }}>{itemDesc || 'N/A'}</div>
+              <div className="text-[25px] font-black uppercase leading-snug" style={{ fontSize: '25px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.15 }}>{itemDesc || 'N/A'}</div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 bg-gray-100 p-2.5 border-2 border-black" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', backgroundColor: '#f3f4f6', padding: '10px', border: '2px solid black' }}>

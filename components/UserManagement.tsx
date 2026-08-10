@@ -36,6 +36,7 @@ const INITIAL_USERS: UserProfile[] = [
       canAccessStatistics: true,
       canAccessStores: true,
       canAccessUsers: true,
+      canAccessLabels: true,
       canAccessReports: true,
       canAccessHistory: true,
     },
@@ -63,6 +64,7 @@ const INITIAL_USERS: UserProfile[] = [
       canAccessStatistics: true,
       canAccessStores: true,
       canAccessUsers: true,
+      canAccessLabels: true,
       canAccessReports: true,
       canAccessHistory: true,
     },
@@ -90,6 +92,7 @@ const INITIAL_USERS: UserProfile[] = [
       canAccessStatistics: true,
       canAccessStores: true,
       canAccessUsers: false,
+      canAccessLabels: true,
       canAccessReports: true,
       canAccessHistory: true,
     },
@@ -117,6 +120,7 @@ const INITIAL_USERS: UserProfile[] = [
       canAccessStatistics: true,
       canAccessStores: false,
       canAccessUsers: false,
+      canAccessLabels: true,
       canAccessReports: true,
       canAccessHistory: true,
     },
@@ -1259,6 +1263,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                         </div>
                       </div>
 
+                      {/* Page: Etiquetas Zebra ZD220 */}
+                      <div
+                        onClick={() => user.id && handleTogglePermission(user.id, 'canAccessLabels')}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          perms.canAccessLabels !== false
+                            ? 'bg-blue-50/80 border-blue-200 text-blue-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
+                          <span className="text-xs font-bold truncate">Etiquetas Zebra ZD220</span>
+                        </div>
+                        <div
+                          className={`w-8 h-4 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                            perms.canAccessLabels !== false ? 'bg-blue-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                              perms.canAccessLabels !== false ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
                       {/* Page: Relatórios & Impressão */}
                       <div
                         onClick={() => user.id && handleTogglePermission(user.id, 'canAccessReports')}
@@ -1880,6 +1910,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           canAccessStatistics: true,
                           canAccessStores: true,
                           canAccessUsers: true,
+                          canAccessLabels: true,
                           canAccessReports: true,
                           canAccessHistory: true,
                         });
@@ -1895,6 +1926,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           canAccessStatistics: false,
                           canAccessStores: false,
                           canAccessUsers: false,
+                          canAccessLabels: false,
                           canAccessReports: false,
                           canAccessHistory: false,
                         });
@@ -1910,6 +1942,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           canAccessStatistics: true,
                           canAccessStores: false,
                           canAccessUsers: false,
+                          canAccessLabels: true,
                           canAccessReports: true,
                           canAccessHistory: true,
                         });
@@ -2035,6 +2068,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className="rounded text-emerald-600 focus:ring-emerald-500"
                     />
                     <span>Relatórios & Impressão</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canAccessLabels !== false}
+                      onChange={(e) => setNewPermissions({ ...newPermissions, canAccessLabels: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>Etiquetas Zebra ZD220</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
@@ -2270,6 +2313,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className="rounded text-amber-600 focus:ring-amber-500"
                     />
                     <span>Relatórios & Impressão</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={approvePermissions.canAccessLabels !== false}
+                      onChange={(e) => setApprovePermissions({ ...approvePermissions, canAccessLabels: e.target.checked })}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Etiquetas Zebra ZD220</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">

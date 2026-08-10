@@ -55,8 +55,6 @@ export const DevAccessModal: React.FC<DevAccessModalProps> = ({
     }
     return 'dev123';
   });
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [newDevPassword, setNewDevPassword] = useState('');
 
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
@@ -90,21 +88,6 @@ export const DevAccessModal: React.FC<DevAccessModalProps> = ({
     } else {
       setErrorMsg('SENHA INVÁLIDA');
     }
-  };
-
-  const handleSaveNewPassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDevPassword.trim()) return;
-
-    const pass = newDevPassword.trim();
-    setStoredDevPassword(pass);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('trindade_dev_password', pass);
-    }
-    setIsChangingPassword(false);
-    setNewDevPassword('');
-    setSuccessMsg('Nova senha master do Desenvolvedor salva com sucesso!');
-    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
   return (
@@ -152,97 +135,51 @@ export const DevAccessModal: React.FC<DevAccessModalProps> = ({
           </div>
         )}
 
-        {!isChangingPassword ? (
-          /* Primary Login Form */
-          <form onSubmit={handleAuthenticate} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-300 flex items-center justify-between">
-                <span>Senha do DEV *</span>
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  autoFocus
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Digite a senha de acesso..."
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono font-bold text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {showPassword ? 'visibility_off' : 'visibility'}
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end text-xs">
-              <button
-                type="button"
-                onClick={() => setIsChangingPassword(true)}
-                className="text-slate-400 hover:text-slate-200 font-medium underline cursor-pointer text-[11px]"
-              >
-                Alterar Senha
-              </button>
-            </div>
-
-            <div className="pt-1 flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-base">login</span>
-                <span>Acessar</span>
-              </button>
-            </div>
-          </form>
-        ) : (
-          /* Change Dev Password Subform */
-          <form onSubmit={handleSaveNewPassword} className="space-y-4 p-4 bg-slate-950 rounded-2xl border border-slate-800">
-            <h4 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-sm">lock_reset</span>
-              <span>Cadastrar Nova Senha Personalizada de Desenvolvedor</span>
-            </h4>
-            <div className="space-y-1">
-              <label className="block text-[11px] text-slate-400">Nova Senha Master DEV:</label>
+        {/* Primary Login Form */}
+        <form onSubmit={handleAuthenticate} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-slate-300 flex items-center justify-between">
+              <span>Senha do DEV *</span>
+            </label>
+            <div className="relative">
               <input
-                type="text"
+                type={showPassword ? 'text' : 'password'}
                 required
-                value={newDevPassword}
-                onChange={(e) => setNewDevPassword(e.target.value)}
-                placeholder="Ex: dev2026 / mestre123"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-mono font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                autoFocus
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Digite a senha de acesso..."
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono font-bold text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-amber-500 pr-10"
               />
-            </div>
-            <div className="flex gap-2 pt-1">
               <button
                 type="button"
-                onClick={() => setIsChangingPassword(false)}
-                className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold cursor-pointer"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
               >
-                Voltar
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs cursor-pointer shadow-md"
-              >
-                Salvar Nova Senha
+                <span className="material-symbols-outlined text-[18px]">
+                  {showPassword ? 'visibility_off' : 'visibility'}
+                </span>
               </button>
             </div>
-          </form>
-        )}
+          </div>
+
+          <div className="pt-1 flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-base">login</span>
+              <span>Acessar</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

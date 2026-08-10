@@ -248,7 +248,7 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
                   <strong className="text-black uppercase">CLI:</strong> <span className="font-black text-[11px] uppercase" style={{ fontWeight: 900, fontSize: '11px' }}>{ord.store}</span>
                 </div>
               )}
-              <div className="text-[11.5px] font-black leading-[1.15] text-black uppercase break-words line-clamp-2 font-sans overflow-hidden" style={{ fontSize: '11px', fontWeight: 900, lineHeight: 1.15, color: 'black', textTransform: 'uppercase', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              <div className="text-[13.5px] font-black leading-[1.1] text-black uppercase break-words line-clamp-2 font-sans overflow-hidden" style={{ fontSize: '13.5px', fontWeight: 900, lineHeight: 1.1, color: 'black', textTransform: 'uppercase', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                 {ord.itemDescription || 'PRODUTO / ITEM NÃO ESPECIFICADO'}
               </div>
               <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0 text-[9.5px] font-black text-black leading-tight" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', fontSize: '9.5px', fontWeight: 900, color: 'black' }}>
@@ -301,7 +301,7 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
                 CLIENTE/LOJA: <strong className="text-[14px] font-black uppercase" style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase' }}>{ord.store}</strong>
               </div>
             )}
-            <div className="text-[14px] font-black uppercase leading-tight break-words whitespace-normal font-sans" style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.2 }}>
+            <div className="text-[18px] font-black uppercase leading-tight break-words whitespace-normal font-sans" style={{ fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.15 }}>
               {ord.itemDescription}
             </div>
             <div className="grid grid-cols-3 gap-1 text-[11px] font-bold bg-gray-100 p-1 border-2 border-black" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#f3f4f6', padding: '4px', border: '2px solid black' }}>
@@ -354,7 +354,7 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
 
           <div className="border-2 border-black p-2 min-h-[45mm]" style={{ border: '2px solid black', padding: '8px', minHeight: '45mm' }}>
             <span className="text-[11px] font-bold uppercase block" style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>ESPECIFICAÇÃO DO PRODUTO:</span>
-            <span className="text-[20px] font-black uppercase leading-tight" style={{ fontSize: '20px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.25 }}>{ord.itemDescription}</span>
+            <span className="text-[25px] font-black uppercase leading-tight" style={{ fontSize: '25px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.15 }}>{ord.itemDescription}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
