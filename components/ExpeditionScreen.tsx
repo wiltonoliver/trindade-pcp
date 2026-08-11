@@ -218,6 +218,7 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isTorchOn, setIsTorchOn] = useState(false);
 
   // Process code input / scan
   const handleProcessCode = useCallback((codeRaw: string) => {
@@ -297,7 +298,7 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     setTimeout(() => setFeedbackMessage(null), 3000);
   };
 
-  // Start Camera Stream using Html5Qrcode (Supports 1D Barcodes + QR)
+  // Start Camera Stream using Html5Qrcode (Supports 1D Barcodes + QR + BarcodeDetector)
   const startCameraStream = async (deviceId?: string) => {
     try {
       if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
@@ -305,6 +306,7 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
       }
 
       setIsCameraActive(true);
+      setIsTorchOn(false);
 
       // Give DOM time to render reader div
       setTimeout(async () => {
@@ -321,29 +323,46 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
               Html5QrcodeSupportedFormats.DATA_MATRIX,
               Html5QrcodeSupportedFormats.ITF,
             ],
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true,
+            },
             verbose: false,
           });
           html5QrCodeRef.current = html5QrCode;
 
           const cameras = await Html5Qrcode.getCameras();
           if (cameras && cameras.length > 0) {
-            setCameraDevices(cameras.map((c) => ({
-              deviceId: c.id,
-              groupId: '',
-              kind: 'videoinput',
-              label: c.label || `Câmera ${c.id.substring(0, 5)}`,
-              toJSON: () => ({}),
-            })));
+            setCameraDevices(
+              cameras.map((c) => ({
+                deviceId: c.id,
+                groupId: '',
+                kind: 'videoinput',
+                label: c.label || `Câmera ${c.id.substring(0, 5)}`,
+                toJSON: () => ({}),
+              }))
+            );
           }
 
-          const cameraId = deviceId || (cameras && cameras.length > 0 ? cameras[cameras.length - 1].id : { facingMode: 'environment' });
+          const targetCamera =
+            deviceId ||
+            (cameras && cameras.length > 0
+              ? cameras[cameras.length - 1].id
+              : { facingMode: 'environment' });
 
           await html5QrCode.start(
-            cameraId,
+            targetCamera,
             {
-              fps: 15,
-              qrbox: { width: 280, height: 180 },
-              aspectRatio: 1.333,
+              fps: 20,
+              qrbox: (viewfinderWidth: number, viewfinderHeight: number) => ({
+                width: Math.floor(viewfinderWidth * 0.92),
+                height: Math.floor(viewfinderHeight * 0.48),
+              }),
+              aspectRatio: 1.3333,
+              videoConstraints: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 },
+              },
             },
             (decodedText) => {
               handleProcessCode(decodedText);
@@ -364,6 +383,21 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     }
   };
 
+  // Toggle Torch / Flashlight on mobile camera if supported
+  const toggleTorch = async () => {
+    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+      try {
+        const nextTorch = !isTorchOn;
+        await html5QrCodeRef.current.applyVideoConstraints({
+          advanced: [{ torch: nextTorch }] as any,
+        });
+        setIsTorchOn(nextTorch);
+      } catch (e) {
+        console.warn('Torch not supported on this device:', e);
+      }
+    }
+  };
+
   // Stop Camera Stream
   const stopCameraStream = async () => {
     if (html5QrCodeRef.current) {
@@ -378,6 +412,7 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
       html5QrCodeRef.current = null;
     }
     setIsCameraActive(false);
+    setIsTorchOn(false);
   };
 
   // Scan Code directly from an uploaded photo or camera picture
@@ -386,27 +421,76 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     if (!file) return;
 
     try {
-      const html5QrCode = new Html5Qrcode('qr-reader-file-temp', {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.QR_CODE,
-        ],
-        verbose: false,
-      });
+      let textFound = '';
 
-      const decodedText = await html5QrCode.scanFile(file, true);
-      handleProcessCode(decodedText);
-      await html5QrCode.clear();
+      // 1. Hardware-accelerated BarcodeDetector API (Android Chrome & Safari iOS 17+)
+      if ('BarcodeDetector' in window) {
+        try {
+          const formats = [
+            'code_128',
+            'code_39',
+            'ean_13',
+            'ean_8',
+            'upc_a',
+            'qr_code',
+            'data_matrix',
+            'itf',
+            'codabar',
+          ];
+          const detector = new (window as any).BarcodeDetector({ formats });
+          const imageBitmap = await createImageBitmap(file);
+          const results = await detector.detect(imageBitmap);
+          if (results && results.length > 0 && results[0].rawValue) {
+            textFound = results[0].rawValue.trim();
+          }
+        } catch (errBar) {
+          console.warn('Native BarcodeDetector photo scan attempt:', errBar);
+        }
+      }
+
+      // 2. Fallback to html5QrCode scanFile
+      if (!textFound) {
+        const html5QrCode = new Html5Qrcode('qr-reader-file-temp', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.DATA_MATRIX,
+            Html5QrcodeSupportedFormats.ITF,
+          ],
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
+          verbose: false,
+        });
+
+        try {
+          textFound = await html5QrCode.scanFile(file, true);
+          html5QrCode.clear();
+        } catch (e) {
+          try { html5QrCode.clear(); } catch (_) {}
+        }
+      }
+
+      if (textFound && textFound.trim()) {
+        handleProcessCode(textFound);
+      } else {
+        playSound('error');
+        setFeedbackMessage({
+          type: 'error',
+          text: '⚠️ Não foi possível ler o código nesta foto. Aproxime a câmera e certifique-se de focar bem no código de barras da etiqueta.',
+        });
+      }
     } catch (err) {
       console.error('Error scanning photo:', err);
       playSound('error');
       setFeedbackMessage({
         type: 'error',
-        text: '⚠️ Não foi possível ler o código nesta foto. Tente tirar uma foto mais nítida ou aproximada da etiqueta.',
+        text: '⚠️ Erro ao processar a imagem. Tente tirar outra foto mais nítida ou aproximada.',
       });
     }
 
@@ -469,8 +553,8 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
                 onClick={() => startCameraStream()}
                 className="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xl shadow-emerald-500/20 cursor-pointer border border-emerald-400"
               >
-                <span className="material-symbols-outlined text-[20px]">photo_camera</span>
-                <span>Usar Câmera do Celular</span>
+                <span className="material-symbols-outlined text-[20px]">videocam</span>
+                <span>🎥 Câmera Ao Vivo</span>
               </button>
             ) : (
               <button
@@ -482,6 +566,15 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
                 <span>Fechar Câmera</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-5 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl text-xs transition-all flex items-center gap-2 shadow-xl shadow-blue-600/20 cursor-pointer border border-blue-400"
+            >
+              <span className="material-symbols-outlined text-[20px]">photo_camera</span>
+              <span>📸 Fotografar Etiqueta (Celular)</span>
+            </button>
           </div>
         </div>
 
@@ -528,22 +621,40 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
                   </span>
                 </div>
 
-                {cameraDevices.length > 1 && (
-                  <select
-                    value={selectedDeviceId}
-                    onChange={(e) => {
-                      setSelectedDeviceId(e.target.value);
-                      startCameraStream(e.target.value);
-                    }}
-                    className="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-xl px-2 py-1 focus:outline-none"
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleTorch}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 border ${
+                      isTorchOn
+                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg'
+                        : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                    }`}
+                    title="Ligar/Desligar Flash"
                   >
-                    {cameraDevices.map((dev, idx) => (
-                      <option key={dev.deviceId} value={dev.deviceId}>
-                        {dev.label || `Câmera ${idx + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                    <span className="material-symbols-outlined text-[16px]">
+                      {isTorchOn ? 'flashlight_on' : 'flashlight_off'}
+                    </span>
+                    <span>{isTorchOn ? 'Flash On' : 'Flash'}</span>
+                  </button>
+
+                  {cameraDevices.length > 1 && (
+                    <select
+                      value={selectedDeviceId}
+                      onChange={(e) => {
+                        setSelectedDeviceId(e.target.value);
+                        startCameraStream(e.target.value);
+                      }}
+                      className="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-xl px-2 py-1 focus:outline-none"
+                    >
+                      {cameraDevices.map((dev, idx) => (
+                        <option key={dev.deviceId} value={dev.deviceId}>
+                          {dev.label || `Câmera ${idx + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
 
               {/* Html5Qrcode Scanner Target Viewport */}
@@ -553,11 +664,12 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
             </div>
           )}
 
-          {/* Hidden File Input for scanning barcode photos */}
+          {/* Hidden File Input for scanning barcode photos (Native camera capture) */}
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            capture="environment"
             onChange={handlePhotoUpload}
             className="hidden"
           />
