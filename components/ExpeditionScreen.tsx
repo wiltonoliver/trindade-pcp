@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { OrderItem, UserProfile, AssemblyOperator, Store } from '@/types/factory';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
-import jsQR from 'jsqr';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface ExpeditionScreenProps {
   orders: OrderItem[];
@@ -216,6 +216,9 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     }, 4000);
   }, [currentUser, dispatchLogs, setOrders]);
 
+  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   // Process code input / scan
   const handleProcessCode = useCallback((codeRaw: string) => {
     if (!codeRaw || !codeRaw.trim()) return;
@@ -294,101 +297,127 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     setTimeout(() => setFeedbackMessage(null), 3000);
   };
 
-  // Camera Scanning Loop using canvas + jsQR
-  const scanCameraFrame = useCallback(() => {
-    if (!isCameraActive || !videoRef.current || !canvasRef.current) return;
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-    if (video.readyState === video.HAVE_ENOUGH_DATA && ctx) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
-      });
-
-      if (code && code.data && code.data.trim()) {
-        const detectedText = code.data.trim();
-        handleProcessCode(detectedText);
-        
-        // Pause continuous scan briefly to avoid double-triggers
-        setTimeout(() => {
-          if (isCameraActive && scanFrameRef.current) {
-            scanAnimFrameRef.current = requestAnimationFrame(scanFrameRef.current);
-          }
-        }, 1500);
-        return;
-      }
-    }
-
-    if (scanFrameRef.current) {
-      scanAnimFrameRef.current = requestAnimationFrame(scanFrameRef.current);
-    }
-  }, [isCameraActive, handleProcessCode]);
-
-  // Keep ref up to date with latest scanCameraFrame function
-  useEffect(() => {
-    scanFrameRef.current = scanCameraFrame;
-  }, [scanCameraFrame]);
-
-  // Start Camera Stream
+  // Start Camera Stream using Html5Qrcode (Supports 1D Barcodes + QR)
   const startCameraStream = async (deviceId?: string) => {
     try {
-      setIsCameraActive(true);
-      const constraints: MediaStreamConstraints = {
-        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' },
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
+      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        await html5QrCodeRef.current.stop();
       }
 
-      // Enumerate available video input camera devices
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoIn = devices.filter((d) => d.kind === 'videoinput');
-      setCameraDevices(videoIn);
+      setIsCameraActive(true);
 
-      // Start processing frames
-      scanAnimFrameRef.current = requestAnimationFrame(scanCameraFrame);
+      // Give DOM time to render reader div
+      setTimeout(async () => {
+        try {
+          const html5QrCode = new Html5Qrcode('qr-reader-viewport', {
+            formatsToSupport: [
+              Html5QrcodeSupportedFormats.CODE_128,
+              Html5QrcodeSupportedFormats.CODE_39,
+              Html5QrcodeSupportedFormats.EAN_13,
+              Html5QrcodeSupportedFormats.EAN_8,
+              Html5QrcodeSupportedFormats.UPC_A,
+              Html5QrcodeSupportedFormats.UPC_E,
+              Html5QrcodeSupportedFormats.QR_CODE,
+              Html5QrcodeSupportedFormats.DATA_MATRIX,
+              Html5QrcodeSupportedFormats.ITF,
+            ],
+            verbose: false,
+          });
+          html5QrCodeRef.current = html5QrCode;
+
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            setCameraDevices(cameras.map((c) => ({
+              deviceId: c.id,
+              groupId: '',
+              kind: 'videoinput',
+              label: c.label || `Câmera ${c.id.substring(0, 5)}`,
+              toJSON: () => ({}),
+            })));
+          }
+
+          const cameraId = deviceId || (cameras && cameras.length > 0 ? cameras[cameras.length - 1].id : { facingMode: 'environment' });
+
+          await html5QrCode.start(
+            cameraId,
+            {
+              fps: 15,
+              qrbox: { width: 280, height: 180 },
+              aspectRatio: 1.333,
+            },
+            (decodedText) => {
+              handleProcessCode(decodedText);
+            },
+            () => {}
+          );
+        } catch (err) {
+          console.error('Camera scan error inside timeout:', err);
+        }
+      }, 300);
     } catch (err) {
       console.error('Camera access error:', err);
       setIsCameraActive(false);
       setFeedbackMessage({
         type: 'error',
-        text: '❌ Erro ao acessar a câmera do celular. Certifique-se de conceder a permissão de vídeo no seu navegador.',
+        text: '❌ Erro ao acessar a câmera do celular. Certifique-se de conceder a permissão no seu navegador.',
       });
     }
   };
 
   // Stop Camera Stream
-  const stopCameraStream = () => {
-    if (scanAnimFrameRef.current) {
-      cancelAnimationFrame(scanAnimFrameRef.current);
-      scanAnimFrameRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+  const stopCameraStream = async () => {
+    if (html5QrCodeRef.current) {
+      try {
+        if (html5QrCodeRef.current.isScanning) {
+          await html5QrCodeRef.current.stop();
+        }
+        await html5QrCodeRef.current.clear();
+      } catch (e) {
+        console.warn('Error stopping html5QrCode:', e);
+      }
+      html5QrCodeRef.current = null;
     }
     setIsCameraActive(false);
+  };
+
+  // Scan Code directly from an uploaded photo or camera picture
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const html5QrCode = new Html5Qrcode('qr-reader-file-temp', {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.QR_CODE,
+        ],
+        verbose: false,
+      });
+
+      const decodedText = await html5QrCode.scanFile(file, true);
+      handleProcessCode(decodedText);
+      await html5QrCode.clear();
+    } catch (err) {
+      console.error('Error scanning photo:', err);
+      playSound('error');
+      setFeedbackMessage({
+        type: 'error',
+        text: '⚠️ Não foi possível ler o código nesta foto. Tente tirar uma foto mais nítida ou aproximada da etiqueta.',
+      });
+    }
+
+    if (e.target) e.target.value = '';
   };
 
   // Cleanup camera on unmount
   useEffect(() => {
     return () => {
-      if (scanAnimFrameRef.current) cancelAnimationFrame(scanAnimFrameRef.current);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
+      if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+        html5QrCodeRef.current.stop().catch(() => {});
       }
     };
   }, []);
@@ -517,31 +546,22 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
                 )}
               </div>
 
-              {/* Video Stream Wrapper */}
-              <div className="relative w-full aspect-4/3 bg-black rounded-2xl overflow-hidden border-2 border-emerald-500/50">
-                <video ref={videoRef} className="w-full h-full object-cover" />
-                <canvas ref={canvasRef} className="hidden" />
-
-                {/* Animated Scanner Laser Overlay */}
-                <div className="absolute inset-0 border-2 border-dashed border-emerald-400/40 m-8 rounded-2xl pointer-events-none flex flex-col justify-between p-4">
-                  <div className="flex justify-between">
-                    <span className="w-4 h-4 border-t-4 border-l-4 border-emerald-400" />
-                    <span className="w-4 h-4 border-t-4 border-r-4 border-emerald-400" />
-                  </div>
-                  {/* Laser Beam Line */}
-                  <div className="w-full h-0.5 bg-emerald-400 shadow-[0_0_15px_#10b981] animate-pulse" />
-                  <div className="flex justify-between">
-                    <span className="w-4 h-4 border-b-4 border-l-4 border-emerald-400" />
-                    <span className="w-4 h-4 border-b-4 border-r-4 border-emerald-400" />
-                  </div>
-                </div>
-
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/80 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold text-white uppercase tracking-wider">
-                  Aproxime o código de barras da etiqueta
-                </div>
+              {/* Html5Qrcode Scanner Target Viewport */}
+              <div className="relative w-full rounded-2xl overflow-hidden border-2 border-emerald-500/50 bg-black">
+                <div id="qr-reader-viewport" className="w-full text-white font-mono text-xs" />
               </div>
             </div>
           )}
+
+          {/* Hidden File Input for scanning barcode photos */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoUpload}
+            className="hidden"
+          />
+          <div id="qr-reader-file-temp" className="hidden" />
 
           {/* Manual Barcode Input Card */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
@@ -583,9 +603,22 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
                   Bipar / Buscar
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium">
-                💡 Leitores ópticos USB/Bluetooth disparam o código automaticamente ao ler a etiqueta.
-              </p>
+
+              {/* Alternative Photo Upload Scanner Button */}
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-[11px] text-slate-400 font-medium">
+                  💡 Leitores USB/Bluetooth ou Câmera do Celular.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1.5 py-1 px-2.5 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors border border-blue-200/60 cursor-pointer shrink-0"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add_a_photo</span>
+                  <span>Escanear Foto da Etiqueta</span>
+                </button>
+              </div>
             </form>
           </div>
 
