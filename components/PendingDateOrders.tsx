@@ -5,6 +5,7 @@ import { OrderItem, UserProfile, AssemblyOperator, Store, KanbanColumnId, OrderS
 import { OrderStatusModal } from './OrderStatusModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
 import { notifyProductionDateSet } from '@/lib/notificationService';
+import { normalizeDateToDDMMYYYY } from '@/lib/dateUtils';
 
 interface PendingDateOrdersProps {
   orders: OrderItem[];
@@ -147,9 +148,10 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
     if (!orderToSchedule) return;
 
     const matchedDay = businessDays.find((b) => b.id === selectedTargetColumn);
-    const assignedDate = customDate.trim()
-      ? customDate.split('-').reverse().join('/') // convert YYYY-MM-DD to DD/MM/YYYY
+    const rawDate = customDate.trim()
+      ? customDate
       : (matchedDay?.dateStr || businessDays[0].dateStr);
+    const assignedDate = normalizeDateToDDMMYYYY(rawDate);
 
     const now = new Date().toLocaleDateString('pt-BR', {
       day: '2-digit',

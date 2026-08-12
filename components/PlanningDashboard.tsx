@@ -5,6 +5,7 @@ import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore, saveOrderToFirestore } from '@/lib/firestoreSync';
+import { normalizeDateToDDMMYYYY, isDateBefore } from '@/lib/dateUtils';
 
 interface PlanningDashboardProps {
   orders: OrderItem[];
@@ -98,7 +99,10 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
       if (dow !== 0 && dow !== 6) {
         const rawDay = curr.toLocaleDateString('pt-BR', { weekday: 'long' });
         const dayName = rawDay.charAt(0).toUpperCase() + rawDay.slice(1);
-        const dateStr = curr.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const day = String(curr.getDate()).padStart(2, '0');
+        const month = String(curr.getMonth() + 1).padStart(2, '0');
+        const year = curr.getFullYear();
+        const dateStr = `${day}/${month}/${year}`;
 
         days.push({
           date: new Date(curr),
@@ -182,17 +186,28 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     );
   });
 
-  const getOrdersByColumn = (col: { id: string; defaultDateStr: string }) => {
+  const getOrdersByColumn = (col: { id: string; defaultDateStr: string; dayNumber?: number }) => {
+    const colDateNorm = normalizeDateToDDMMYYYY(col.defaultDateStr);
+
     return filteredOrders.filter((ord) => {
-      if (ord.productionDate && ord.productionDate.trim() === col.defaultDateStr.trim()) {
+      if (!ord.productionDate || ord.productionDate.toLowerCase().includes('aguardando')) {
+        return false;
+      }
+
+      const ordDateNorm = normalizeDateToDDMMYYYY(ord.productionDate);
+
+      // 1. Exact calendar date match (ground truth)
+      if (ordDateNorm === colDateNorm) {
         return true;
       }
-      if (ord.column === col.id) {
-        return true;
+
+      // 2. If Column 1 ("Hoje"), also include active pending/delayed orders from past dates so they remain visible to production
+      if (col.dayNumber === 1 && ordDateNorm !== 'Aguardando Data') {
+        if (isDateBefore(ordDateNorm, colDateNorm) && ord.executionStatus !== 'concluido' && ord.progress < 100) {
+          return true;
+        }
       }
-      if (col.id === 'dia_3' && ord.column === 'proximos_7_dias') {
-        return true;
-      }
+
       return false;
     });
   };

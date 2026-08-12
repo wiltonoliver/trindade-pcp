@@ -110,7 +110,9 @@ export const DailyProductivity: React.FC<DailyProductivityProps> = ({
             <span className="material-symbols-outlined text-blue-600 text-[18px]">
               event
             </span>
-            <span className="text-xs font-bold text-blue-600">21 de Julho de 2026</span>
+            <span className="text-xs font-bold text-blue-600">
+              {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            </span>
           </div>
         </div>
       </div>

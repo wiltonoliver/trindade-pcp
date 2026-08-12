@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator, AppNotification } from '@/types/factory';
 import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_OPERATORS } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
+import { normalizeDateToDDMMYYYY } from '@/lib/dateUtils';
 
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
@@ -181,7 +182,13 @@ export default function FactoryOpsApp() {
       const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_order_ids') : null;
       const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
       if (remoteOrders) {
-        const filtered = remoteOrders.filter((o) => o.id && !deletedIds.includes(o.id));
+        const filtered = remoteOrders
+          .filter((o) => o.id && !deletedIds.includes(o.id))
+          .map((o) => ({
+            ...o,
+            unit: sanitizeUnit(o.unit),
+            productionDate: normalizeDateToDDMMYYYY(o.productionDate),
+          }));
         setOrders(filtered);
         if (typeof window !== 'undefined') {
           localStorage.setItem('factoryops_orders', JSON.stringify(filtered));
@@ -233,9 +240,6 @@ export default function FactoryOpsApp() {
       const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
       const filtered = orders.filter((o) => o.id && !deletedIds.includes(o.id));
       localStorage.setItem('factoryops_orders', JSON.stringify(filtered));
-      filtered.forEach((ord) => {
-        saveOrderToFirestore(ord).catch((e) => console.error('Firestore order error:', e));
-      });
     }
   }, [orders, isLoaded]);
 
@@ -273,7 +277,13 @@ export default function FactoryOpsApp() {
           uniqueId = `${uniqueId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         }
         existingIds.add(uniqueId);
-        return { ...o, id: uniqueId };
+        const newOrd = {
+          ...o,
+          id: uniqueId,
+          productionDate: o.productionDate ? normalizeDateToDDMMYYYY(o.productionDate) : 'Aguardando Data',
+        };
+        saveOrderToFirestore(newOrd).catch((e) => console.error('Error saving new order to Firestore:', e));
+        return newOrd;
       });
       return [...sanitizedNew, ...prev];
     });
