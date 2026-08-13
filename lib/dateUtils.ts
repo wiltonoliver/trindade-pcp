@@ -45,6 +45,12 @@ export const normalizeDateToDDMMYYYY = (dateStr?: string | null): string => {
     return `${d}/${m}/20${y}`;
   }
 
+  // DD/MM (e.g., 12/08)
+  if (/^\d{2}\/\d{2}$/.test(trimmed)) {
+    const currentYear = new Date().getFullYear();
+    return `${trimmed}/${currentYear}`;
+  }
+
   // YYYY-MM-DD or ISO string
   if (trimmed.includes('-')) {
     const datePart = trimmed.split('T')[0];
@@ -92,4 +98,19 @@ export const isSameCalendarDay = (dateStrA: string, dateStrB: string): boolean =
     return false;
   }
   return normA === normB;
+};
+
+/**
+ * Checks if an order was programmed for a past date and has not been completed ("baixa").
+ */
+export const isOrderOverdueForCheckoff = (
+  productionDate?: string | null,
+  executionStatus?: string,
+  progress: number = 0,
+  todayDateStr: string = getLocalDateFormatted()
+): boolean => {
+  if (executionStatus === 'concluido' || progress >= 100) return false;
+  if (!productionDate || productionDate.toLowerCase().includes('aguardando')) return false;
+  const norm = normalizeDateToDDMMYYYY(productionDate);
+  return isDateBefore(norm, todayDateStr);
 };

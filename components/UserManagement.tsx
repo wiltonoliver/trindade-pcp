@@ -30,6 +30,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageUsers: true,
       canAccessOrderEntry: true,
       canAccessPendingDate: true,
+      canAccessPendingCheckouts: true,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -58,6 +59,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageUsers: true,
       canAccessOrderEntry: true,
       canAccessPendingDate: true,
+      canAccessPendingCheckouts: true,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -86,6 +88,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageUsers: false,
       canAccessOrderEntry: true,
       canAccessPendingDate: true,
+      canAccessPendingCheckouts: true,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -114,6 +117,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageUsers: false,
       canAccessOrderEntry: false,
       canAccessPendingDate: true,
+      canAccessPendingCheckouts: true,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -142,6 +146,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageUsers: false,
       canAccessOrderEntry: false,
       canAccessPendingDate: false,
+      canAccessPendingCheckouts: false,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -169,6 +174,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageUsers: false,
       canAccessOrderEntry: false,
       canAccessPendingDate: true,
+      canAccessPendingCheckouts: true,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -263,6 +269,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     canManageUsers: false,
     canAccessOrderEntry: true,
     canAccessPendingDate: true,
+    canAccessPendingCheckouts: true,
     canAccessDashboard: true,
     canAccessCompleted: true,
     canAccessProductivity: true,
@@ -291,6 +298,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     canManageUsers: true,
     canAccessOrderEntry: true,
     canAccessPendingDate: true,
+    canAccessPendingCheckouts: true,
     canAccessDashboard: true,
     canAccessCompleted: true,
     canAccessProductivity: true,
@@ -441,6 +449,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         canManageStores: false,
         canManageUsers: false,
         canAccessOrderEntry: true,
+        canAccessPendingDate: true,
+        canAccessPendingCheckouts: true,
         canAccessDashboard: true,
         canAccessProductivity: true,
         canAccessStores: true,
@@ -1102,6 +1112,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           <div
                             className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
                               perms.canAccessPendingDate !== false ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Page: Baixas Pendentes */}
+                      <div
+                        onClick={() => user.id && handleTogglePermission(user.id, 'canAccessPendingCheckouts')}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          perms.canAccessPendingCheckouts !== false
+                            ? 'bg-amber-50/80 border-amber-200 text-amber-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="material-symbols-outlined text-[18px]">history_toggle_off</span>
+                          <span className="text-xs font-bold truncate">Baixas Pendentes</span>
+                        </div>
+                        <div
+                          className={`w-8 h-4 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                            perms.canAccessPendingCheckouts !== false ? 'bg-amber-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                              perms.canAccessPendingCheckouts !== false ? 'translate-x-4' : 'translate-x-0'
                             }`}
                           />
                         </div>
@@ -2039,6 +2075,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
                     <input
                       type="checkbox"
+                      checked={newPermissions.canAccessPendingCheckouts !== false}
+                      onChange={(e) => setNewPermissions({ ...newPermissions, canAccessPendingCheckouts: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>Baixas Pendentes</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
                       checked={newPermissions.canAccessDashboard !== false}
                       onChange={(e) => setNewPermissions({ ...newPermissions, canAccessDashboard: e.target.checked })}
                       className="rounded text-emerald-600 focus:ring-emerald-500"
@@ -2279,6 +2325,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className="rounded text-amber-600 focus:ring-amber-500"
                     />
                     <span>Aguardando Data</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={approvePermissions.canAccessPendingCheckouts !== false}
+                      onChange={(e) => setApprovePermissions({ ...approvePermissions, canAccessPendingCheckouts: e.target.checked })}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Baixas Pendentes</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">

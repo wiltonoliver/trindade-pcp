@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator, AppNotification } from '@/types/factory';
 import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_OPERATORS } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
-import { normalizeDateToDDMMYYYY } from '@/lib/dateUtils';
+import { normalizeDateToDDMMYYYY, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
 
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
@@ -20,6 +20,7 @@ import { LabelGenerator } from '@/components/LabelGenerator';
 import { ExpeditionScreen } from '@/components/ExpeditionScreen';
 import { CompletedOrders } from '@/components/CompletedOrders';
 import { PendingDateOrders } from '@/components/PendingDateOrders';
+import { PendingCheckouts } from '@/components/PendingCheckouts';
 
 import { ProfileSettingsModal } from '@/components/ProfileSettingsModal';
 import { NotificationsDrawer } from '@/components/NotificationsDrawer';
@@ -347,6 +348,8 @@ export default function FactoryOpsApp() {
         return p.canAccessOrderEntry !== false;
       case 'pending-date':
         return p.canAccessPendingDate !== false;
+      case 'pending-checkouts':
+        return p.canAccessPendingCheckouts !== false;
       case 'dashboard':
         return p.canAccessDashboard !== false;
       case 'productivity':
@@ -440,6 +443,9 @@ export default function FactoryOpsApp() {
       o.progress !== 100 &&
       (o.column === 'nao_planejado' || !o.productionDate || o.productionDate.toLowerCase().includes('aguardando'))
   ).length;
+  const pendingCheckoutsCount = orders.filter((o) =>
+    isOrderOverdueForCheckoff(o.productionDate, o.executionStatus, o.progress)
+  ).length;
 
   const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
 
@@ -502,6 +508,7 @@ export default function FactoryOpsApp() {
         setActiveTab={setActiveTab}
         pendingCount={0}
         pendingDateCount={pendingDateCount}
+        pendingCheckoutsCount={pendingCheckoutsCount}
         pendingUsersCount={pendingUsersCount}
         completedCount={completedCount}
         currentUser={currentUser}
@@ -543,6 +550,18 @@ export default function FactoryOpsApp() {
           />
         )}
 
+        {activeTab === 'pending-checkouts' && isTabAllowed('pending-checkouts') && (
+          <PendingCheckouts
+            orders={orders}
+            setOrders={setOrders}
+            stores={stores}
+            operators={operators}
+            searchQuery={searchQuery}
+            currentUser={currentUser}
+            onNavigateToDashboard={() => setActiveTab('dashboard')}
+          />
+        )}
+
         {activeTab === 'dashboard' && isTabAllowed('dashboard') && (
           <PlanningDashboard
             orders={orders}
@@ -554,6 +573,11 @@ export default function FactoryOpsApp() {
             onNavigateToOrderEntry={() => {
               if (isTabAllowed('order-entry')) {
                 setActiveTab('order-entry');
+              }
+            }}
+            onNavigateToPendingCheckouts={() => {
+              if (isTabAllowed('pending-checkouts')) {
+                setActiveTab('pending-checkouts');
               }
             }}
           />

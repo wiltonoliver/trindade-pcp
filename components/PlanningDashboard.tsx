@@ -5,7 +5,7 @@ import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore, saveOrderToFirestore } from '@/lib/firestoreSync';
-import { normalizeDateToDDMMYYYY, isDateBefore } from '@/lib/dateUtils';
+import { normalizeDateToDDMMYYYY, isDateBefore, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
 
 interface PlanningDashboardProps {
   orders: OrderItem[];
@@ -13,6 +13,7 @@ interface PlanningDashboardProps {
   operators?: AssemblyOperator[];
   searchQuery: string;
   onNavigateToOrderEntry: () => void;
+  onNavigateToPendingCheckouts?: () => void;
   onOpenDevModal?: () => void;
   currentUser?: UserProfile | null;
 }
@@ -23,11 +24,12 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   operators = INITIAL_OPERATORS,
   searchQuery,
   onNavigateToOrderEntry,
+  onNavigateToPendingCheckouts,
   onOpenDevModal,
   currentUser,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'mes' | 'semana'>('mes');
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list');
   const [currentPage, setCurrentPage] = useState<number>(1); // 1, 2, or 3 (3 screens = 15 business days)
   const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -75,12 +77,20 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   };
 
   // New Order Form state
-  const [newOrderId, setNewOrderId] = useState('#ORD-9950');
-  const [newStore, setNewStore] = useState('Loja E - Flamboyant');
-  const [newItemDesc, setNewItemDesc] = useState('30x Calças Sarja Executive');
-  const [newQty, setNewQty] = useState(30);
+  const [newOrderId, setNewOrderId] = useState('');
+  const [newStore, setNewStore] = useState('');
+  const [newItemDesc, setNewItemDesc] = useState('');
+  const [newQty, setNewQty] = useState<number | ''>('');
   const [newColumn, setNewColumn] = useState<KanbanColumnId>('hoje');
   const [newPriority, setNewPriority] = useState<PriorityLevel>('NORMAL');
+
+  const handleOpenAddModal = () => {
+    setNewOrderId('');
+    setNewStore('');
+    setNewItemDesc('');
+    setNewQty('');
+    setIsAddModalOpen(true);
+  };
 
   // Compute 15 consecutive business days (skipping weekends)
   const get15BusinessDays = () => {
@@ -176,6 +186,11 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   // Filter active orders (excluding completed ones) and filter by search query
   const activeOrders = orders.filter((ord) => ord.executionStatus !== 'concluido' && ord.progress !== 100);
 
+  // Orders overdue for check-off from past dates
+  const overdueCheckouts = orders.filter((ord) =>
+    isOrderOverdueForCheckoff(ord.productionDate, ord.executionStatus, ord.progress)
+  );
+
   const filteredOrders = activeOrders.filter((ord) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -196,19 +211,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
       const ordDateNorm = normalizeDateToDDMMYYYY(ord.productionDate);
 
-      // 1. Exact calendar date match (ground truth)
-      if (ordDateNorm === colDateNorm) {
-        return true;
-      }
-
-      // 2. If Column 1 ("Hoje"), also include active pending/delayed orders from past dates so they remain visible to production
-      if (col.dayNumber === 1 && ordDateNorm !== 'Aguardando Data') {
-        if (isDateBefore(ordDateNorm, colDateNorm) && ord.executionStatus !== 'concluido' && ord.progress < 100) {
-          return true;
-        }
-      }
-
-      return false;
+      // Exact calendar date match for this column
+      return ordDateNorm === colDateNorm;
     });
   };
 
@@ -318,17 +322,18 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
     const newOrd: OrderItem = {
       id: `ord-${generatedId}`,
-      orderId: newOrderId || fallbackOrderId,
-      store: newStore,
-      storeInitials: newStore
+      orderId: newOrderId.trim() || fallbackOrderId,
+      store: newStore.trim(),
+      storeInitials: newStore.trim()
         .split(' ')
         .map((w) => w[0])
+        .filter(Boolean)
         .join('')
         .substring(0, 2)
-        .toUpperCase(),
+        .toUpperCase() || 'OP',
       storeColorClass: 'bg-[#dae2fd] text-[#131b2e]',
-      itemDescription: newItemDesc,
-      quantity: Number(newQty),
+      itemDescription: newItemDesc.trim(),
+      quantity: Number(newQty) || 1,
       progress: 0,
       column: newColumn,
       priority: newPriority,
@@ -337,6 +342,11 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     };
 
     setOrders((prev) => [newOrd, ...prev]);
+    saveOrderToFirestore(newOrd).catch(() => {});
+    setNewOrderId('');
+    setNewStore('');
+    setNewItemDesc('');
+    setNewQty('');
     setIsAddModalOpen(false);
   };
 
@@ -384,7 +394,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
           {!isReadOnly && (
             <button
-              onClick={() => setIsAddModalOpen(true)}
+              onClick={handleOpenAddModal}
               className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
@@ -394,7 +404,34 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         </div>
       </div>
 
-      {/* Pending Urgency Requests Top Alert Banner */}
+      {/* Overdue Check-offs Alert Banner */}
+      {overdueCheckouts.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 border-l-4 border-l-amber-500 text-amber-950 px-4 py-3.5 rounded-2xl text-xs font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-amber-600 text-white rounded-xl font-bold flex items-center justify-center shrink-0 shadow-xs">
+              <span className="material-symbols-outlined text-lg">history_toggle_off</span>
+            </div>
+            <div>
+              <p className="font-bold text-amber-950 text-xs">
+                {overdueCheckouts.length} {overdueCheckouts.length === 1 ? 'Baixa Pendente de dia anterior' : 'Baixas Pendentes de dias anteriores'}
+              </p>
+              <p className="text-amber-900/80 text-[11px] font-medium mt-0.5">
+                Existem produções programadas em datas passadas que não foram baixadas. Dê baixa para não misturar com as produções vigentes de hoje.
+              </p>
+            </div>
+          </div>
+          {onNavigateToPendingCheckouts && (
+            <button
+              type="button"
+              onClick={onNavigateToPendingCheckouts}
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-xs flex items-center gap-1.5 self-end sm:self-auto"
+            >
+              <span>Ir para Baixas Pendentes</span>
+              <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            </button>
+          )}
+        </div>
+      )}
       {pendingUrgencyOrders.length > 0 && (
         <div className="bg-amber-100/90 border border-amber-400 border-l-4 border-l-amber-500 text-amber-950 px-4 py-3.5 rounded-2xl text-xs font-semibold flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs animate-fadeIn">
           <div className="flex items-center gap-3">
@@ -1031,6 +1068,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   required
                   value={newOrderId}
                   onChange={(e) => setNewOrderId(e.target.value)}
+                  placeholder="Ex: #ORD-9950"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1044,6 +1082,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   required
                   value={newStore}
                   onChange={(e) => setNewStore(e.target.value)}
+                  placeholder="Ex: Loja E - Flamboyant"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1070,8 +1109,10 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   <input
                     type="number"
                     required
+                    min={1}
                     value={newQty}
-                    onChange={(e) => setNewQty(Number(e.target.value))}
+                    onChange={(e) => setNewQty(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="Ex: 30"
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

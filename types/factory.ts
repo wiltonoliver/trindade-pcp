@@ -115,7 +115,7 @@ export interface Store {
   status: 'Ativa' | 'Inativa';
 }
 
-export type ActiveTab = 'dashboard' | 'pending-date' | 'order-entry' | 'productivity' | 'completed' | 'statistics' | 'history' | 'stores' | 'users' | 'reports' | 'labels' | 'expedition';
+export type ActiveTab = 'dashboard' | 'pending-checkouts' | 'pending-date' | 'order-entry' | 'productivity' | 'completed' | 'statistics' | 'history' | 'stores' | 'users' | 'reports' | 'labels' | 'expedition';
 
 export type UserStatus = 'approved' | 'pending' | 'blocked';
 
@@ -125,6 +125,7 @@ export interface UserPermissions {
   canManageStores: boolean;
   canManageUsers: boolean;
   canAccessOrderEntry?: boolean;
+  canAccessPendingCheckouts?: boolean;
   canAccessPendingDate?: boolean;
   canAccessDashboard?: boolean;
   canAccessProductivity?: boolean;

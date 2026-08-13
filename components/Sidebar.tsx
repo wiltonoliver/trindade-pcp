@@ -9,6 +9,7 @@ interface SidebarProps {
   setActiveTab: (tab: ActiveTab) => void;
   pendingCount?: number;
   pendingDateCount?: number;
+  pendingCheckoutsCount?: number;
   pendingUsersCount?: number;
   completedCount?: number;
   currentUser?: UserProfile | null;
@@ -22,6 +23,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   pendingCount = 0,
   pendingDateCount = 0,
+  pendingCheckoutsCount = 0,
   pendingUsersCount = 0,
   completedCount = 0,
   currentUser,
@@ -47,6 +49,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: 'pending_actions',
       badge: pendingDateCount > 0 ? pendingDateCount : null,
       permissionKey: 'canAccessPendingDate' as keyof UserPermissions,
+    },
+    {
+      id: 'pending-checkouts' as ActiveTab,
+      label: 'Baixas Pendentes',
+      icon: 'history_toggle_off',
+      badge: pendingCheckoutsCount > 0 ? pendingCheckoutsCount : null,
+      badgeColor: 'amber',
+      permissionKey: 'canAccessPendingCheckouts' as keyof UserPermissions,
     },
     {
       id: 'dashboard' as ActiveTab,
@@ -185,7 +195,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span>{item.label}</span>
               </div>
               {item.badge !== null && (
-                <span className="bg-slate-800 text-slate-400 text-[10px] font-medium px-2 py-0.5 rounded-full border border-slate-700/60">
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  item.badgeColor === 'amber'
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                }`}>
                   {item.badge}
                 </span>
               )}
