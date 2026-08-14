@@ -50,7 +50,7 @@ function fallbackExtractOrders(
         quantity: qty > 0 ? qty : 1,
         unit: 'un',
         priority: isHighPriorityAll || /urgente|alta/i.test(trimmed) ? 'ALTA PRIORIDADE' : 'NORMAL',
-        productionDate: referenceDate || 'Hoje',
+        productionDate: 'Aguardando Data',
         deliveryDate: defaultDeliveryDate || '',
         notes: 'Extraído no formato padrão (OP Loja - Qtd Descrição)',
       });
@@ -72,7 +72,7 @@ function fallbackExtractOrders(
         quantity: qty > 0 ? qty : 1,
         unit: 'un',
         priority: isHighPriorityAll || /urgente|alta/i.test(trimmed) ? 'ALTA PRIORIDADE' : 'NORMAL',
-        productionDate: referenceDate || 'Hoje',
+        productionDate: 'Aguardando Data',
         deliveryDate: defaultDeliveryDate || '',
         notes: 'Extraído no formato (OP - Qtd Descrição)',
       });
@@ -113,7 +113,7 @@ function fallbackExtractOrders(
         quantity: qty > 0 ? qty : 1,
         unit: 'un',
         priority: isHighPriorityAll || /urgente|alta/i.test(trimmed) ? 'ALTA PRIORIDADE' : 'NORMAL',
-        productionDate: referenceDate || 'Hoje',
+        productionDate: 'Aguardando Data',
         deliveryDate: defaultDeliveryDate || '',
         notes: 'Extraído por identificador de OP por linha',
       });
@@ -130,7 +130,7 @@ function fallbackExtractOrders(
         quantity: parseInt(p4[1], 10),
         unit: 'un',
         priority: isHighPriorityAll || /urgente|alta/i.test(trimmed) ? 'ALTA PRIORIDADE' : 'NORMAL',
-        productionDate: referenceDate || 'Hoje',
+        productionDate: 'Aguardando Data',
         deliveryDate: defaultDeliveryDate || '',
         notes: 'Extraído por quantidade x item',
       });
@@ -155,7 +155,7 @@ function fallbackExtractOrders(
         quantity: 1,
         unit: 'un',
         priority: isHighPriorityAll ? 'ALTA PRIORIDADE' : 'NORMAL',
-        productionDate: referenceDate || 'Hoje',
+        productionDate: 'Aguardando Data',
         deliveryDate: defaultDeliveryDate || '',
         notes: 'Extraído do texto por linha',
       });
@@ -259,6 +259,7 @@ REGRA CRÍTICA DE EXTRAÇÃO:
             ...o,
             orderId: o.orderId ? (o.orderId.startsWith('#') ? o.orderId : `#${o.orderId}`) : `#ORD-${Math.floor(1000 + Math.random() * 9000)}`,
             unit: sanitizeUnit(o.unit),
+            productionDate: o.productionDate && !o.productionDate.toLowerCase().includes('hoje') ? o.productionDate : 'Aguardando Data',
             deliveryDate: o.deliveryDate || deliveryDate || '',
           }));
           return NextResponse.json({

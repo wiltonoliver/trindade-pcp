@@ -278,10 +278,12 @@ export default function FactoryOpsApp() {
           uniqueId = `${uniqueId}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         }
         existingIds.add(uniqueId);
-        const newOrd = {
+        const newOrd: OrderItem = {
           ...o,
           id: uniqueId,
-          productionDate: o.productionDate ? normalizeDateToDDMMYYYY(o.productionDate) : 'Aguardando Data',
+          column: 'nao_planejado',
+          productionDate: 'Aguardando Data',
+          executionStatus: 'pendente',
         };
         saveOrderToFirestore(newOrd).catch((e) => console.error('Error saving new order to Firestore:', e));
         return newOrd;

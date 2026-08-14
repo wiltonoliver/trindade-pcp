@@ -81,7 +81,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const [newStore, setNewStore] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
   const [newQty, setNewQty] = useState<number | ''>('');
-  const [newColumn, setNewColumn] = useState<KanbanColumnId>('hoje');
+  const [newColumn, setNewColumn] = useState<KanbanColumnId>('nao_planejado');
   const [newPriority, setNewPriority] = useState<PriorityLevel>('NORMAL');
 
   const handleOpenAddModal = () => {
@@ -89,6 +89,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
     setNewStore('');
     setNewItemDesc('');
     setNewQty('');
+    setNewColumn('nao_planejado');
     setIsAddModalOpen(true);
   };
 
@@ -314,8 +315,9 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
+    const isAguardando = newColumn === 'nao_planejado';
     const matchedCol = allColumnsConfig.find((c) => c.id === newColumn);
-    const initialDate = matchedCol?.defaultDateStr || '';
+    const initialDate = isAguardando ? 'Aguardando Data' : (matchedCol?.defaultDateStr || '');
 
     const generatedId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `ord-${String(new Date().valueOf())}`;
     const fallbackOrderId = `#ORD-${String(Math.floor(Number(new Date().valueOf() % 9000)) + 1000)}`;
@@ -1124,11 +1126,12 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   <select
                     value={newColumn}
                     onChange={(e) => setNewColumn(e.target.value as KanbanColumnId)}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500 font-medium"
                   >
+                    <option value="nao_planejado">⏳ Aguardando Data (Fila de Programação)</option>
                     {allColumnsConfig.map((c) => (
                       <option key={c.id} value={c.id} suppressHydrationWarning>
-                        {c.title}
+                        📅 {c.title}
                       </option>
                     ))}
                   </select>

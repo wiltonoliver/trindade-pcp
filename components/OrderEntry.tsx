@@ -174,7 +174,7 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
         unit: sanitizeUnit(ext.unit),
         progress: 0,
         column: 'nao_planejado',
-        productionDate: ext.productionDate || referenceDate,
+        productionDate: 'Aguardando Data',
         deliveryDate: finalDeliveryDate,
         priority: ext.priority?.includes('ALTA') ? 'ALTA PRIORIDADE' : 'NORMAL',
         executionStatus: 'pendente',
@@ -393,11 +393,14 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
 
                   <button
                     onClick={handleConfirmAndAddToDashboard}
-                    className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                    className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold py-3.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
                   >
-                    <span className="material-symbols-outlined text-[20px]">playlist_add</span>
-                    <span>Adicionar ao Planejamento ({extractedOrders.length} itens)</span>
+                    <span className="material-symbols-outlined text-[20px]">pending_actions</span>
+                    <span>Salvar em Aguardando Data ({extractedOrders.length} itens)</span>
                   </button>
+                  <p className="text-[11px] text-center text-slate-400 mt-2 font-medium">
+                    Os pedidos serão enviados para a fila de <strong>Aguardando Data</strong> para o gerente programar o dia de produção.
+                  </p>
                 </div>
               ) : (
                 /* Empty State Illustration */
