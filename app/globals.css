@@ -4,6 +4,17 @@
   body {
     font-family: 'Inter', sans-serif;
   }
+
+  /* Auto-uppercase for all standard text input fields and textareas */
+  input:not([type="password"]):not([type="email"]):not([type="number"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]):not([type="hidden"]),
+  textarea {
+    text-transform: uppercase;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    text-transform: none;
+  }
 }
 
 .material-symbols-outlined {

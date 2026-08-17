@@ -324,8 +324,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
     const newOrd: OrderItem = {
       id: `ord-${generatedId}`,
-      orderId: newOrderId.trim() || fallbackOrderId,
-      store: newStore.trim(),
+      orderId: (newOrderId.trim() || fallbackOrderId).toUpperCase(),
+      store: newStore.trim().toUpperCase(),
       storeInitials: newStore.trim()
         .split(' ')
         .map((w) => w[0])
@@ -334,7 +334,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         .substring(0, 2)
         .toUpperCase() || 'OP',
       storeColorClass: 'bg-[#dae2fd] text-[#131b2e]',
-      itemDescription: newItemDesc.trim(),
+      itemDescription: newItemDesc.trim().toUpperCase(),
       quantity: Number(newQty) || 1,
       progress: 0,
       column: newColumn,
@@ -1087,6 +1087,24 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   placeholder="Ex: Loja E - Flamboyant"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
+                <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors select-none">
+                  <input
+                    type="checkbox"
+                    checked={newStore.toUpperCase() === 'PD. ESTOQUE'}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setNewStore('PD. ESTOQUE');
+                      } else if (newStore.toUpperCase() === 'PD. ESTOQUE') {
+                        setNewStore('');
+                      }
+                    }}
+                    className="w-3.5 h-3.5 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                  />
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[15px] text-amber-600">inventory_2</span>
+                    Pedido Para Estoque
+                  </span>
+                </label>
               </div>
 
               <div>
