@@ -5,6 +5,11 @@ import { OrderItem, UserProfile, AssemblyOperator, Store, OrderStatusHistoryLog 
 import { isOrderOverdueForCheckoff, normalizeDateToDDMMYYYY, getLocalDateFormatted } from '@/lib/dateUtils';
 import { OrderStatusModal } from './OrderStatusModal';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
+import {
+  notifyOrderCompleted,
+  notifyBatchOrdersCompleted,
+  notifyProductionRescheduled,
+} from '@/lib/notificationService';
 
 interface PendingCheckoutsProps {
   orders: OrderItem[];
@@ -128,6 +133,7 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
 
     setOrders((prev) => prev.map((o) => (o.id === ord.id ? updatedOrder : o)));
     saveOrderToFirestore(updatedOrder).catch(() => {});
+    notifyOrderCompleted(ord.orderId, ord.store, author);
     showToast(`Baixa concluída com sucesso para o pedido ${ord.orderId}!`);
   };
 
@@ -157,6 +163,7 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
 
     setOrders((prev) => prev.map((o) => (o.id === ord.id ? updatedOrder : o)));
     saveOrderToFirestore(updatedOrder).catch(() => {});
+    notifyProductionRescheduled(ord.orderId, ord.store, todayStr, ord.productionDate, 'Reagendado via Baixas Pendentes', author);
     showToast(`Pedido ${ord.orderId} reagendado para Hoje (${todayStr})!`, 'info');
   };
 
@@ -181,6 +188,7 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
 
     const author = currentUser?.name || 'Gerente de Operações';
     const nowISO = new Date().toISOString();
+    const count = selectedOrderIds.length;
 
     setOrders((prev) => {
       const updated = prev.map((ord) => {
@@ -207,7 +215,8 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
       return updated;
     });
 
-    showToast(`${selectedOrderIds.length} pedidos receberam baixa coletiva com sucesso!`);
+    notifyBatchOrdersCompleted(count, author);
+    showToast(`${count} pedidos receberam baixa coletiva com sucesso!`);
     setSelectedOrderIds([]);
   };
 
@@ -217,6 +226,7 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
 
     const author = currentUser?.name || 'Gerente de Operações';
     const nowISO = new Date().toISOString();
+    const count = selectedOrderIds.length;
 
     setOrders((prev) => {
       const updated = prev.map((ord) => {
@@ -244,7 +254,15 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
       return updated;
     });
 
-    showToast(`${selectedOrderIds.length} pedidos foram reagendados para Hoje (${todayStr})!`, 'info');
+    notifyProductionRescheduled(
+      `${count} OPs`,
+      'Múltiplas Lojas',
+      todayStr,
+      undefined,
+      'Reagendamento coletivo para hoje',
+      author
+    );
+    showToast(`${count} pedidos foram reagendados para Hoje (${todayStr})!`, 'info');
     setSelectedOrderIds([]);
   };
 

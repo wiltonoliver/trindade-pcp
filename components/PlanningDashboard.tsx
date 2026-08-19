@@ -6,6 +6,12 @@ import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore, saveOrderToFirestore } from '@/lib/firestoreSync';
 import { normalizeDateToDDMMYYYY, isDateBefore, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
+import {
+  notifyOrderReceived,
+  notifyProductionScheduled,
+  notifyProductionRescheduled,
+  notifyOrderNotCompletedPendingDate,
+} from '@/lib/notificationService';
 
 interface PlanningDashboardProps {
   orders: OrderItem[];
@@ -251,13 +257,25 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
       const updatedList = prev.map((ord) => {
         if (ord.id === id) {
           const isAguardando = targetCol === 'nao_planejado';
+          const newDate = isAguardando ? 'Aguardando Data' : (dateToAssign || ord.productionDate || '');
           const updated = {
             ...ord,
             column: targetCol,
-            productionDate: isAguardando ? 'Aguardando Data' : (dateToAssign || ord.productionDate),
-            executionStatus: isAguardando ? 'pendente' : ord.executionStatus,
+            productionDate: newDate,
+            executionStatus: isAguardando ? ('pendente' as const) : ord.executionStatus,
           };
           saveOrderToFirestore(updated).catch(() => {});
+
+          if (isAguardando && ord.productionDate !== 'Aguardando Data') {
+            notifyOrderNotCompletedPendingDate(ord.orderId, ord.store, 'Movido para Aguardando Data', currentUser?.name);
+          } else if (!isAguardando && newDate && newDate !== ord.productionDate) {
+            if (!ord.productionDate || ord.productionDate === 'Aguardando Data') {
+              notifyProductionScheduled(ord.orderId, ord.store, newDate, currentUser?.name);
+            } else {
+              notifyProductionRescheduled(ord.orderId, ord.store, newDate, ord.productionDate, 'Movido no Kanban', currentUser?.name);
+            }
+          }
+
           return updated;
         }
         return ord;
@@ -276,13 +294,25 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
       const updatedList = prev.map((ord) => {
         if (ord.id === id) {
           const isAguardando = targetCol === 'nao_planejado';
+          const newDate = isAguardando ? 'Aguardando Data' : (dateToAssign || ord.productionDate || '');
           const updated = {
             ...ord,
             column: targetCol,
-            productionDate: isAguardando ? 'Aguardando Data' : (dateToAssign || ord.productionDate),
-            executionStatus: isAguardando ? 'pendente' : ord.executionStatus,
+            productionDate: newDate,
+            executionStatus: isAguardando ? ('pendente' as const) : ord.executionStatus,
           };
           saveOrderToFirestore(updated).catch(() => {});
+
+          if (isAguardando && ord.productionDate !== 'Aguardando Data') {
+            notifyOrderNotCompletedPendingDate(ord.orderId, ord.store, 'Movido para Aguardando Data', currentUser?.name);
+          } else if (!isAguardando && newDate && newDate !== ord.productionDate) {
+            if (!ord.productionDate || ord.productionDate === 'Aguardando Data') {
+              notifyProductionScheduled(ord.orderId, ord.store, newDate, currentUser?.name);
+            } else {
+              notifyProductionRescheduled(ord.orderId, ord.store, newDate, ord.productionDate, 'Reagendado via Kanban', currentUser?.name);
+            }
+          }
+
           return updated;
         }
         return ord;
@@ -297,13 +327,25 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
       const updatedList = prev.map((ord) => {
         if (ord.id === id) {
           const isEmptyOrAguardando = !dateStr.trim() || dateStr.toLowerCase().includes('aguardando');
+          const finalDate = isEmptyOrAguardando ? 'Aguardando Data' : dateStr;
           const updated = {
             ...ord,
-            productionDate: dateStr,
-            column: isEmptyOrAguardando ? 'nao_planejado' : ord.column,
-            executionStatus: isEmptyOrAguardando ? 'pendente' : ord.executionStatus,
+            productionDate: finalDate,
+            column: isEmptyOrAguardando ? ('nao_planejado' as const) : ord.column,
+            executionStatus: isEmptyOrAguardando ? ('pendente' as const) : ord.executionStatus,
           };
           saveOrderToFirestore(updated).catch(() => {});
+
+          if (isEmptyOrAguardando && ord.productionDate !== 'Aguardando Data') {
+            notifyOrderNotCompletedPendingDate(ord.orderId, ord.store, 'Data removida / aguardando', currentUser?.name);
+          } else if (!isEmptyOrAguardando && finalDate !== ord.productionDate) {
+            if (!ord.productionDate || ord.productionDate === 'Aguardando Data') {
+              notifyProductionScheduled(ord.orderId, ord.store, finalDate, currentUser?.name);
+            } else {
+              notifyProductionRescheduled(ord.orderId, ord.store, finalDate, ord.productionDate, 'Data atualizada manualmente', currentUser?.name);
+            }
+          }
+
           return updated;
         }
         return ord;
@@ -345,6 +387,13 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
     setOrders((prev) => [newOrd, ...prev]);
     saveOrderToFirestore(newOrd).catch(() => {});
+
+    // Notify creation
+    notifyOrderReceived(newOrd.orderId, newOrd.store, newOrd.itemDescription, currentUser?.name);
+    if (!isAguardando && initialDate) {
+      notifyProductionScheduled(newOrd.orderId, newOrd.store, initialDate, currentUser?.name);
+    }
+
     setNewOrderId('');
     setNewStore('');
     setNewItemDesc('');
@@ -677,10 +726,32 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
                         {/* Items & Progress */}
                         <div className="space-y-2">
-                          <div className="flex items-center gap-1.5 text-slate-600">
-                            <span className="material-symbols-outlined text-[14px] text-slate-400 shrink-0">
-                              inventory_2
-                            </span>
+                          <div className="flex items-center gap-2 text-slate-600">
+                            {ord.imageUrl ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedOrderForStatusModal(ord);
+                                }}
+                                className="relative w-8 h-8 rounded-lg overflow-hidden border border-blue-200 shrink-0 group cursor-pointer hover:border-blue-500 transition-all"
+                                title="Clique para ver imagem / desenho técnico"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={ord.imageUrl}
+                                  alt="Miniatura OP"
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                />
+                                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <span className="material-symbols-outlined text-white text-[12px]">zoom_in</span>
+                                </div>
+                              </button>
+                            ) : (
+                              <span className="material-symbols-outlined text-[14px] text-slate-400 shrink-0">
+                                inventory_2
+                              </span>
+                            )}
                             <span className="text-[11px] font-medium truncate">{ord.itemDescription}</span>
                           </div>
 
@@ -880,7 +951,27 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                               </div>
                             </td>
                             <td className="px-5 py-4 text-slate-700 font-medium">
-                              {ord.itemDescription}
+                              <div className="flex items-center gap-2">
+                                {ord.imageUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedOrderForStatusModal(ord)}
+                                    className="relative w-7 h-7 rounded-md overflow-hidden border border-blue-200 shrink-0 group cursor-pointer hover:border-blue-500 transition-all"
+                                    title="Ver imagem / desenho técnico"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={ord.imageUrl}
+                                      alt="Miniatura"
+                                      className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                    />
+                                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                      <span className="material-symbols-outlined text-white text-[11px]">zoom_in</span>
+                                    </div>
+                                  </button>
+                                )}
+                                <span>{ord.itemDescription}</span>
+                              </div>
                             </td>
                             <td className="px-5 py-4 text-center font-bold text-slate-900">
                               {ord.quantity}

@@ -85,6 +85,8 @@ export interface OrderItem {
   organizationScore?: number;
   disciplineScore?: number;
   urgencyRequest?: UrgencyRequest;
+  imageUrl?: string;
+  images?: string[];
 }
 
 export interface ProblemHistoryItem {
@@ -155,10 +157,15 @@ export interface UserProfile {
 export type NotificationType =
   | 'order_received'
   | 'production_date_set'
+  | 'production_rescheduled'
+  | 'order_completed'
+  | 'order_not_completed_pending'
+  | 'order_not_completed_deleted'
+  | 'order_deleted'
+  | 'order_reopened'
   | 'urgency_requested'
   | 'urgency_approved'
   | 'urgency_rejected'
-  | 'order_completed'
   | 'user_pending'
   | 'system';
 
@@ -173,5 +180,7 @@ export interface AppNotification {
   orderId?: string;
   storeName?: string;
   actor?: string;
+  readBy?: string[];
+  clearedBy?: string[];
 }
 

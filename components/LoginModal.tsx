@@ -179,6 +179,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   // Registration wait state
   const [registeredPendingUser, setRegisteredPendingUser] = useState<UserProfile | null>(null);
 
+  // Registration Form State
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('DIRETORIA');
+  const [customRole, setCustomRole] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPlant, setNewPlant] = useState('Planta A - Matriz');
+
   const loadSavedUsers = () => {
     if (typeof window !== 'undefined') {
       const deletedIdsStr = localStorage.getItem('trindade_deleted_user_ids');
@@ -224,13 +231,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       window.removeEventListener('trindade_users_updated', loadSavedUsers);
     };
   }, []);
-
-  // Registration Form State
-  const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('DIRETORIA');
-  const [customRole, setCustomRole] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newPlant, setNewPlant] = useState('Planta A - Matriz');
 
   if (!isOpen) return null;
 
@@ -300,6 +300,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       const savedDevPass = typeof window !== 'undefined' ? (localStorage.getItem('trindade_dev_password') || 'dev123') : 'dev123';
       const validDevPasses = [savedDevPass.trim(), 'dev123', 'dev2026', 'admin123', 'trindade2026'];
       if (validDevPasses.includes(loginPassword.trim())) {
+        setLoginUsername('');
+        setLoginPassword('');
+        setLoginError('');
         onLogin({
           ...matchedUser,
           password: loginPassword.trim(),
@@ -311,6 +314,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     const expectedPassword = matchedUser.password;
     if (!expectedPassword || expectedPassword.trim() === '' || loginPassword === expectedPassword) {
+      setLoginUsername('');
+      setLoginPassword('');
+      setLoginError('');
       onLogin(matchedUser);
       if (onClose) onClose();
     } else {

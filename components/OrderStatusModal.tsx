@@ -1,14 +1,17 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { OrderItem, ExecutionStatus, OrderStatusHistoryLog, UserProfile, UrgencyRequest } from '@/types/factory';
 import { sanitizeUnit } from '@/lib/utils';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
+import { compressImageFile } from '@/lib/imageUtils';
+import { ImageLightboxModal } from '@/components/ImageLightboxModal';
 import {
   notifyUrgencyRequested,
   notifyUrgencyApproved,
   notifyUrgencyRejected,
   notifyOrderCompleted,
+  notifyOrderNotCompletedPendingDate,
 } from '@/lib/notificationService';
 
 interface OrderStatusModalProps {
@@ -56,6 +59,10 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   // Editable item description & delivery date
   const [editableItemDescription, setEditableItemDescription] = useState<string>(order?.itemDescription || '');
   const [editableDeliveryDate, setEditableDeliveryDate] = useState<string>(order?.deliveryDate || '');
+  const [modalImage, setModalImage] = useState<string | null>(order?.imageUrl || null);
+  const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
+  const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
+  const modalFileInputRef = useRef<HTMLInputElement>(null);
 
   // Track current order ID to reset local state when order changes
   const [prevOrderId, setPrevOrderId] = useState<string | null>(null);
@@ -71,7 +78,24 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     setDisciplineScore(order.disciplineScore || 5);
     setEditableItemDescription(order.itemDescription || '');
     setEditableDeliveryDate(order.deliveryDate || '');
+    setModalImage(order.imageUrl || null);
   }
+
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        setIsProcessingImage(true);
+        const compressed = await compressImageFile(file);
+        setModalImage(compressed);
+      } catch (err) {
+        console.error('Erro ao processar imagem no modal:', err);
+      } finally {
+        setIsProcessingImage(false);
+      }
+    }
+    if (e.target) e.target.value = '';
+  };
 
   // Convert DD/MM/YYYY or YYYY-MM-DD to YYYY-MM-DD for <input type="date">
   const formatToInputDate = (dateStr?: string) => {
@@ -101,8 +125,9 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     if (!order) return false;
     const descChanged = (editableItemDescription || '').trim() !== (order.itemDescription || '').trim();
     const dateChanged = (editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim();
-    return descChanged || dateChanged;
-  }, [order, editableItemDescription, editableDeliveryDate]);
+    const imageChanged = (modalImage || null) !== (order.imageUrl || null);
+    return descChanged || dateChanged || imageChanged;
+  }, [order, editableItemDescription, editableDeliveryDate, modalImage]);
 
   // Urgency Request Local States
   const [urgencyReasonText, setUrgencyReasonText] = useState<string>('');
@@ -276,13 +301,16 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     if ((editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim()) {
       fieldChangeNotes.push(`Data de entrega alterada para "${editableDeliveryDate.trim() || 'Sem data'}"`);
     }
+    if ((modalImage || null) !== (order.imageUrl || null)) {
+      fieldChangeNotes.push(modalImage ? 'Imagem/Desenho técnico anexado ou atualizado' : 'Imagem/Desenho técnico removido');
+    }
 
     const newLog: OrderStatusHistoryLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: nowStr,
       author: authorName,
       status: order.executionStatus,
-      reason: 'Atualização de Cadastro / Peça / Entrega',
+      reason: 'Atualização de Cadastro / Peça / Imagem',
       note: fieldChangeNotes.join('; '),
       actionType: 'status_update',
     };
@@ -291,6 +319,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       ...order,
       itemDescription: editableItemDescription.trim() || order.itemDescription,
       deliveryDate: editableDeliveryDate.trim(),
+      imageUrl: modalImage || undefined,
+      images: modalImage ? [modalImage] : undefined,
       statusHistory: fieldChangeNotes.length > 0 ? [newLog, ...(order.statusHistory || [])] : order.statusHistory,
     };
 
@@ -354,6 +384,9 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     if ((editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim()) {
       fieldChangeNotes.push(`Data de entrega alterada para "${editableDeliveryDate.trim() || 'Sem data'}"`);
     }
+    if ((modalImage || null) !== (order.imageUrl || null)) {
+      fieldChangeNotes.push(modalImage ? 'Imagem/Desenho técnico anexado ou atualizado' : 'Imagem/Desenho técnico removido');
+    }
 
     let combinedNote = customNote.trim();
     if (fieldChangeNotes.length > 0) {
@@ -384,6 +417,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       ...order,
       itemDescription: editableItemDescription.trim() || order.itemDescription,
       deliveryDate: editableDeliveryDate.trim(),
+      imageUrl: modalImage || undefined,
+      images: modalImage ? [modalImage] : undefined,
       executionStatus: finalStatus,
       progress: finalProgress,
       column: finalColumn,
@@ -399,6 +434,13 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     onUpdateOrder(updatedOrder);
     saveOrderToFirestore(updatedOrder);
+
+    if (selectedStatus === 'concluido') {
+      notifyOrderCompleted(order.orderId, order.store, authorName);
+    } else if (selectedStatus === 'retornado_aguardando' || returnToPendingDate) {
+      notifyOrderNotCompletedPendingDate(order.orderId, order.store, effectiveReason, authorName);
+    }
+
     onClose();
   };
 
@@ -508,6 +550,104 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                   className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-all cursor-pointer"
                 />
               </div>
+            </div>
+
+            {/* Attached Image / Technical Drawing Area */}
+            <div className="pt-3 border-t border-slate-200/80">
+              <input
+                type="file"
+                ref={modalFileInputRef}
+                onChange={handleImageFileSelect}
+                accept="image/*"
+                className="hidden"
+              />
+
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[16px] text-blue-600">add_photo_alternate</span>
+                  <span>Imagem / Desenho Técnico da Peça</span>
+                </label>
+
+                {modalImage && (
+                  <button
+                    type="button"
+                    onClick={() => setIsLightboxOpen(true)}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-xs">zoom_in</span>
+                    <span>Ampliar Imagem</span>
+                  </button>
+                )}
+              </div>
+
+              {modalImage ? (
+                <div className="p-3 bg-white border border-blue-200 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                  <div
+                    onClick={() => setIsLightboxOpen(true)}
+                    className="flex items-center gap-3 cursor-pointer group min-w-0"
+                  >
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border-2 border-blue-300 shadow-2xs shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={modalImage}
+                        alt="Anexo do pedido"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                      />
+                      <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <span className="material-symbols-outlined text-white text-base">zoom_in</span>
+                      </div>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded uppercase">
+                        Anexo Visual
+                      </span>
+                      <p className="text-xs font-bold text-slate-900 truncate mt-0.5">
+                        Clique para visualizar em tela cheia
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        Foto / Desenho técnico registrado
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => modalFileInputRef.current?.click()}
+                      className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                      title="Substituir Imagem"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalImage(null)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Remover Imagem"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => modalFileInputRef.current?.click()}
+                  className="w-full py-2.5 px-3 bg-white border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50/40 rounded-xl text-xs font-bold text-slate-700 hover:text-blue-700 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                >
+                  {isProcessingImage ? (
+                    <>
+                      <span className="material-symbols-outlined text-base animate-spin text-blue-600">sync</span>
+                      <span>Processando imagem...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-base text-blue-600">add_photo_alternate</span>
+                      <span>Anexar Imagem ou Desenho Técnico desta OP</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
@@ -1108,6 +1248,16 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Lightbox Modal */}
+      <ImageLightboxModal
+        isOpen={isLightboxOpen}
+        onClose={() => setIsLightboxOpen(false)}
+        imageUrl={modalImage}
+        title={`OP #${order.orderId} - ${editableItemDescription || order.itemDescription}`}
+        subtitle={`Loja: ${order.store} • Entrega: ${editableDeliveryDate || order.deliveryDate || 'Sem data'}`}
+        orderId={order.orderId}
+      />
     </div>
   );
 };

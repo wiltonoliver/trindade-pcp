@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { OrderItem, UserProfile, AssemblyOperator, Store, KanbanColumnId, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
-import { notifyProductionDateSet } from '@/lib/notificationService';
+import { notifyProductionDateSet, notifyOrderDeleted } from '@/lib/notificationService';
 import { normalizeDateToDDMMYYYY } from '@/lib/dateUtils';
 
 interface PendingDateOrdersProps {
@@ -193,8 +193,10 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
   const handleConfirmDelete = async () => {
     if (!orderToDelete) return;
     const targetId = orderToDelete.id;
+    const orderInfo = { ...orderToDelete };
     setOrders((prev) => prev.filter((o) => o.id !== targetId));
     await deleteOrderFromFirestore(targetId);
+    notifyOrderDeleted(orderInfo.orderId, orderInfo.store, currentUser?.name, 'Excluído da fila de Aguardando Data');
     setOrderToDelete(null);
   };
 
@@ -456,7 +458,27 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
 
                                   {/* Item Description */}
                                   <td className="px-5 py-4 text-slate-800 font-semibold min-w-[200px]">
-                                    {ord.itemDescription}
+                                    <div className="flex items-center gap-2">
+                                      {ord.imageUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedOrderForStatusModal(ord)}
+                                          className="relative w-7 h-7 rounded-md overflow-hidden border border-blue-200 shrink-0 group cursor-pointer hover:border-blue-500 transition-all"
+                                          title="Ver imagem / desenho técnico"
+                                        >
+                                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                                          <img
+                                            src={ord.imageUrl}
+                                            alt="Miniatura OP"
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                          />
+                                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                            <span className="material-symbols-outlined text-white text-[11px]">zoom_in</span>
+                                          </div>
+                                        </button>
+                                      )}
+                                      <span>{ord.itemDescription}</span>
+                                    </div>
                                   </td>
 
                                   {/* Quantity */}

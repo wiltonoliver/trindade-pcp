@@ -5,6 +5,7 @@ import { OrderItem, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { BatchLabelModal } from './BatchLabelModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
+import { notifyOrderReopened, notifyOrderDeleted } from '@/lib/notificationService';
 
 interface CompletedOrdersProps {
   orders: OrderItem[];
@@ -181,6 +182,12 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
       prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
     );
     saveOrderToFirestore(updatedOrder);
+    notifyOrderReopened(
+      updatedOrder.orderId,
+      updatedOrder.store,
+      currentUser?.name,
+      remakeNote.trim() || 'Enviado para refazer na fábrica'
+    );
 
     setOrderToRemake(null);
     setRemakeNote('');
@@ -191,8 +198,10 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
     if (!orderToDelete) return;
 
     const targetId = orderToDelete.id;
+    const orderInfo = { ...orderToDelete };
     setOrders((prev) => prev.filter((o) => o.id !== targetId));
     await deleteOrderFromFirestore(targetId);
+    notifyOrderDeleted(orderInfo.orderId, orderInfo.store, currentUser?.name, 'Excluído da lista de concluídos');
     setOrderToDelete(null);
   };
 

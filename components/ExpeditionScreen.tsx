@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { OrderItem, UserProfile, AssemblyOperator, Store } from '@/types/factory';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
+import { notifyOrderCompleted } from '@/lib/notificationService';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 
 interface ExpeditionScreenProps {
@@ -182,6 +183,7 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     // Update in React State & Firestore
     setOrders((prev) => prev.map((o) => (o.id === orderToDispatch.id ? updatedOrder : o)));
     saveOrderToFirestore(updatedOrder).catch((err) => console.error('Error saving dispatched order:', err));
+    notifyOrderCompleted(orderToDispatch.orderId, orderToDispatch.store, userAuthor);
 
     // Add entry to local dispatch logs
     const newLogEntry: DispatchLogEntry = {

@@ -5,6 +5,8 @@ import Image from 'next/image';
 import { OrderItem, ExecutionStatus } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { sanitizeUnit } from '@/lib/utils';
+import { saveOrderToFirestore } from '@/lib/firestoreSync';
+import { notifyOrderCompleted } from '@/lib/notificationService';
 
 interface DailyProductivityProps {
   orders: OrderItem[];
@@ -47,12 +49,17 @@ export const DailyProductivity: React.FC<DailyProductivityProps> = ({
           else if (status === 'parcial') updatedProgress = 50;
           else if (status === 'nao_produzido') updatedProgress = 0;
 
-          return {
+          const updated = {
             ...ord,
             executionStatus: status,
             progress: updatedProgress,
             delayReason: reason !== undefined ? reason : ord.delayReason,
           };
+          saveOrderToFirestore(updated).catch(() => {});
+          if (status === 'concluido') {
+            notifyOrderCompleted(ord.orderId, ord.store, ord.assignedOperatorName || 'Operador');
+          }
+          return updated;
         }
         return ord;
       })

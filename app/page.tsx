@@ -1,10 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator, AppNotification } from '@/types/factory';
 import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_OPERATORS } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
 import { normalizeDateToDDMMYYYY, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
+import {
+  getUserNotificationKey,
+  isNotificationVisibleForUser,
+  isNotificationReadForUser,
+  notifyOrderReceived,
+  notifyBatchOrdersReceived,
+  notifyOrderReopened,
+} from '@/lib/notificationService';
 
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
@@ -44,6 +52,7 @@ export default function FactoryOpsApp() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(true);
+  const [loginModalKey, setLoginModalKey] = useState<number>(() => Date.now());
   const [isDevModalOpen, setIsDevModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [selectedStoreForOrder, setSelectedStoreForOrder] = useState<string | undefined>(undefined);
@@ -270,6 +279,8 @@ export default function FactoryOpsApp() {
 
   // Handler to add orders extracted from OrderEntry
   const handleAddOrdersToPlanning = (newOrders: OrderItem[]) => {
+    if (newOrders.length === 0) return;
+
     setOrders((prev) => {
       const existingIds = new Set(prev.map((o) => o.id));
       const sanitizedNew = newOrders.map((o, idx) => {
@@ -290,6 +301,22 @@ export default function FactoryOpsApp() {
       });
       return [...sanitizedNew, ...prev];
     });
+
+    // Emit notification(s) for added orders
+    if (newOrders.length === 1) {
+      notifyOrderReceived(
+        newOrders[0].orderId,
+        newOrders[0].store,
+        newOrders[0].itemDescription,
+        currentUser?.name
+      );
+    } else if (newOrders.length > 1) {
+      notifyBatchOrdersReceived(
+        newOrders.length,
+        newOrders[0]?.store,
+        currentUser?.name
+      );
+    }
   };
 
   // Handler to reintroduce single item from ReplanningHistory (remanejando o item existente, sem duplicar)
@@ -297,19 +324,22 @@ export default function FactoryOpsApp() {
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === item.id) {
-          return {
+          const updated = {
             ...o,
-            column: 'nao_planejado',
-            executionStatus: 'pendente',
+            column: 'nao_planejado' as const,
+            executionStatus: 'pendente' as const,
             isPendingReposition: false,
-            productionDate: '',
+            productionDate: 'Aguardando Data',
             pendingReason: '',
             delayReason: '',
           };
+          saveOrderToFirestore(updated).catch(() => {});
+          return updated;
         }
         return o;
       })
     );
+    notifyOrderReopened(item.orderId, item.store, currentUser?.name, 'Reintroduzido para fila de programação');
   };
 
   // Handler to reintroduce all items from ReplanningHistory
@@ -318,19 +348,24 @@ export default function FactoryOpsApp() {
     setOrders((prev) =>
       prev.map((o) => {
         if (itemIds.has(o.id)) {
-          return {
+          const updated = {
             ...o,
-            column: 'nao_planejado',
-            executionStatus: 'pendente',
+            column: 'nao_planejado' as const,
+            executionStatus: 'pendente' as const,
             isPendingReposition: false,
-            productionDate: '',
+            productionDate: 'Aguardando Data',
             pendingReason: '',
             delayReason: '',
           };
+          saveOrderToFirestore(updated).catch(() => {});
+          return updated;
         }
         return o;
       })
     );
+    if (items.length > 0) {
+      notifyBatchOrdersReceived(items.length, undefined, currentUser?.name);
+    }
   };
 
   const handleLoginUser = (user: UserProfile) => {
@@ -449,36 +484,132 @@ export default function FactoryOpsApp() {
     isOrderOverdueForCheckoff(o.productionDate, o.executionStatus, o.progress)
   ).length;
 
-  const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
+  // User-specific notification identification and preferences
+  const userNotifKey = useMemo(() => getUserNotificationKey(currentUser), [currentUser]);
+  const [localClearedNotifIds, setLocalClearedNotifIds] = useState<string[]>([]);
+  const [localReadNotifIds, setLocalReadNotifIds] = useState<string[]>([]);
+
+  // Load user-specific cleared and read notifications preferences on mount and user switch
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (typeof window !== 'undefined' && userNotifKey) {
+        try {
+          const clearedStr = localStorage.getItem(`trindade_notif_cleared_${userNotifKey}`);
+          setLocalClearedNotifIds(clearedStr ? JSON.parse(clearedStr) : []);
+          const readStr = localStorage.getItem(`trindade_notif_read_${userNotifKey}`);
+          setLocalReadNotifIds(readStr ? JSON.parse(readStr) : []);
+        } catch (e) {
+          console.error('Error parsing user notifications storage:', e);
+        }
+      }
+    });
+  }, [userNotifKey]);
+
+  // Compute user-independent notifications list (only includes notifications not cleared by this user)
+  const userNotifications = useMemo(() => {
+    const clearedSet = new Set(localClearedNotifIds);
+    const readSet = new Set(localReadNotifIds);
+
+    return notifications
+      .filter((n) => isNotificationVisibleForUser(n, userNotifKey, clearedSet))
+      .map((n) => ({
+        ...n,
+        read: isNotificationReadForUser(n, userNotifKey, readSet),
+      }));
+  }, [notifications, userNotifKey, localClearedNotifIds, localReadNotifIds]);
+
+  const unreadNotificationsCount = userNotifications.filter((n) => !n.read).length;
 
   const handleMarkNotificationAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => {
-        if (n.id === id) {
-          const updated = { ...n, read: true };
-          saveNotificationToFirestore(updated).catch(() => {});
-          return updated;
-        }
-        return n;
-      })
-    );
+    setLocalReadNotifIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const updated = [...prev, id];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`trindade_notif_read_${userNotifKey}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    const target = notifications.find((n) => n.id === id);
+    if (target) {
+      const existingReadBy = Array.isArray(target.readBy) ? target.readBy : [];
+      if (!existingReadBy.includes(userNotifKey)) {
+        const updated: AppNotification = {
+          ...target,
+          readBy: [...existingReadBy, userNotifKey],
+        };
+        saveNotificationToFirestore(updated).catch(() => {});
+      }
+    }
   };
 
   const handleMarkAllNotificationsAsRead = () => {
-    setNotifications((prev) =>
-      prev.map((n) => {
-        const updated = { ...n, read: true };
+    const visibleIds = userNotifications.map((n) => n.id);
+    setLocalReadNotifIds((prev) => {
+      const combined = Array.from(new Set([...prev, ...visibleIds]));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`trindade_notif_read_${userNotifKey}`, JSON.stringify(combined));
+      }
+      return combined;
+    });
+
+    userNotifications.forEach((n) => {
+      const existingReadBy = Array.isArray(n.readBy) ? n.readBy : [];
+      if (!existingReadBy.includes(userNotifKey)) {
+        const updated: AppNotification = {
+          ...n,
+          readBy: [...existingReadBy, userNotifKey],
+        };
         saveNotificationToFirestore(updated).catch(() => {});
-        return updated;
-      })
-    );
+      }
+    });
   };
 
+  // Limpa as notificações SOMENTE para o usuário logado (sem deletar do Firestore para os outros)
   const handleClearAllNotifications = () => {
-    notifications.forEach((n) => {
-      deleteNotificationFromFirestore(n.id).catch(() => {});
+    const visibleIds = userNotifications.map((n) => n.id);
+    setLocalClearedNotifIds((prev) => {
+      const combined = Array.from(new Set([...prev, ...visibleIds]));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`trindade_notif_cleared_${userNotifKey}`, JSON.stringify(combined));
+      }
+      return combined;
     });
-    setNotifications([]);
+
+    userNotifications.forEach((n) => {
+      const existingClearedBy = Array.isArray(n.clearedBy) ? n.clearedBy : [];
+      if (!existingClearedBy.includes(userNotifKey)) {
+        const updated: AppNotification = {
+          ...n,
+          clearedBy: [...existingClearedBy, userNotifKey],
+        };
+        saveNotificationToFirestore(updated).catch(() => {});
+      }
+    });
+  };
+
+  // Remove uma notificação específica SOMENTE da visualização deste usuário
+  const handleDeleteNotification = (id: string) => {
+    setLocalClearedNotifIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const updated = [...prev, id];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`trindade_notif_cleared_${userNotifKey}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    const target = notifications.find((n) => n.id === id);
+    if (target) {
+      const existingClearedBy = Array.isArray(target.clearedBy) ? target.clearedBy : [];
+      if (!existingClearedBy.includes(userNotifKey)) {
+        const updated: AppNotification = {
+          ...target,
+          clearedBy: [...existingClearedBy, userNotifKey],
+        };
+        saveNotificationToFirestore(updated).catch(() => {});
+      }
+    }
   };
 
   const handleNotificationClick = (n: AppNotification) => {
@@ -487,15 +618,28 @@ export default function FactoryOpsApp() {
       n.type === 'urgency_requested' ||
       n.type === 'urgency_approved' ||
       n.type === 'urgency_rejected' ||
-      n.type === 'order_received'
+      n.type === 'order_received' ||
+      n.type === 'order_not_completed_pending'
     ) {
       if (isTabAllowed('pending-date')) {
         setActiveTab('pending-date');
       } else {
         setActiveTab('dashboard');
       }
-    } else if (n.type === 'production_date_set' || n.type === 'order_completed') {
+    } else if (n.type === 'production_date_set' || n.type === 'production_rescheduled' || n.type === 'order_reopened') {
       if (isTabAllowed('dashboard')) {
+        setActiveTab('dashboard');
+      }
+    } else if (n.type === 'order_completed') {
+      if (isTabAllowed('completed')) {
+        setActiveTab('completed');
+      } else if (isTabAllowed('dashboard')) {
+        setActiveTab('dashboard');
+      }
+    } else if (n.type === 'order_not_completed_deleted' || n.type === 'order_deleted') {
+      if (isTabAllowed('pending-checkouts')) {
+        setActiveTab('pending-checkouts');
+      } else if (isTabAllowed('dashboard')) {
         setActiveTab('dashboard');
       }
     }
@@ -514,7 +658,10 @@ export default function FactoryOpsApp() {
         pendingUsersCount={pendingUsersCount}
         completedCount={completedCount}
         currentUser={currentUser}
-        onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenLogin={() => {
+          setLoginModalKey(Date.now());
+          setIsLoginOpen(true);
+        }}
         isOpenMobile={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
       />
@@ -529,7 +676,10 @@ export default function FactoryOpsApp() {
         pendingUsersCount={pendingUsersCount}
         onNavigateToUsers={() => setActiveTab('users')}
         currentUser={currentUser}
-        onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenLogin={() => {
+          setLoginModalKey(Date.now());
+          setIsLoginOpen(true);
+        }}
         onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
       />
 
@@ -712,11 +862,15 @@ export default function FactoryOpsApp() {
         onResetData={handleResetAllData}
         currentUser={currentUser}
         onUpdateUser={(updated) => setCurrentUser(updated)}
-        onSwitchUser={() => setIsLoginOpen(true)}
+        onSwitchUser={() => {
+          setLoginModalKey(Date.now());
+          setIsLoginOpen(true);
+        }}
       />
 
       {/* Login / User Identification Modal */}
       <LoginModal
+        key={loginModalKey}
         isOpen={isLoginOpen}
         onClose={() => setIsLoginOpen(false)}
         onLogin={handleLoginUser}
@@ -728,10 +882,12 @@ export default function FactoryOpsApp() {
       <NotificationsDrawer
         isOpen={isNotificationsOpen}
         onClose={() => setIsNotificationsOpen(false)}
-        notifications={notifications}
+        notifications={userNotifications}
+        currentUser={currentUser}
         onMarkAsRead={handleMarkNotificationAsRead}
         onMarkAllAsRead={handleMarkAllNotificationsAsRead}
         onClearNotifications={handleClearAllNotifications}
+        onDeleteNotification={handleDeleteNotification}
         onNotificationClick={handleNotificationClick}
       />
 

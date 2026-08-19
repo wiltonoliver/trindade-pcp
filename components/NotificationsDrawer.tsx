@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AppNotification } from '@/types/factory';
+import { AppNotification, UserProfile } from '@/types/factory';
 
 interface NotificationsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   notifications?: AppNotification[];
+  currentUser?: UserProfile | null;
   onClearNotifications?: () => void;
   onMarkAllAsRead?: () => void;
   onMarkAsRead?: (id: string) => void;
@@ -19,6 +20,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
   isOpen,
   onClose,
   notifications = [],
+  currentUser,
   onClearNotifications,
   onMarkAllAsRead,
   onMarkAsRead,
@@ -26,18 +28,32 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
   onNavigateToOrder,
   onNotificationClick,
 }) => {
-  const [filterType, setFilterType] = useState<'all' | 'urgency' | 'orders'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'urgency' | 'orders' | 'status'>('all');
 
   if (!isOpen) return null;
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const userName = currentUser?.name || 'Meu Perfil';
 
   const filteredNotifications = notifications.filter((n) => {
     if (filterType === 'urgency') {
       return n.type.includes('urgency');
     }
     if (filterType === 'orders') {
-      return n.type === 'order_received' || n.type === 'production_date_set' || n.type === 'order_completed';
+      return (
+        n.type === 'order_received' ||
+        n.type === 'production_date_set' ||
+        n.type === 'production_rescheduled' ||
+        n.type === 'order_completed' ||
+        n.type === 'order_reopened'
+      );
+    }
+    if (filterType === 'status') {
+      return (
+        n.type === 'order_not_completed_pending' ||
+        n.type === 'order_not_completed_deleted' ||
+        n.type === 'order_deleted'
+      );
     }
     return true;
   });
@@ -47,16 +63,58 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
       case 'order_received':
         return {
           icon: 'inventory_2',
-          bg: 'bg-blue-50 border-blue-200 text-blue-800',
+          bg: 'bg-blue-50/80 border-blue-200 text-blue-900',
           iconColor: 'text-blue-600',
-          label: 'Pedido Recebido',
+          label: 'Novo Pedido',
         };
       case 'production_date_set':
         return {
           icon: 'event',
-          bg: 'bg-indigo-50 border-indigo-200 text-indigo-900',
+          bg: 'bg-indigo-50/80 border-indigo-200 text-indigo-900',
           iconColor: 'text-indigo-600',
-          label: 'Data Programada',
+          label: 'Produção Agendada',
+        };
+      case 'production_rescheduled':
+        return {
+          icon: 'update',
+          bg: 'bg-sky-50/80 border-sky-200 text-sky-900',
+          iconColor: 'text-sky-600',
+          label: 'Produção Reagendada',
+        };
+      case 'order_completed':
+        return {
+          icon: 'check_circle',
+          bg: 'bg-emerald-50/80 border-emerald-200 text-emerald-900',
+          iconColor: 'text-emerald-600',
+          label: 'Produção Concluída',
+        };
+      case 'order_not_completed_pending':
+        return {
+          icon: 'schedule',
+          bg: 'bg-amber-50/80 border-amber-200 text-amber-900',
+          iconColor: 'text-amber-600',
+          label: 'Aguardando Nova Data',
+        };
+      case 'order_not_completed_deleted':
+        return {
+          icon: 'remove_shopping_cart',
+          bg: 'bg-rose-50/80 border-rose-200 text-rose-900',
+          iconColor: 'text-rose-600',
+          label: 'Não Concluído / Excluído',
+        };
+      case 'order_deleted':
+        return {
+          icon: 'delete_forever',
+          bg: 'bg-slate-100 border-slate-300 text-slate-900',
+          iconColor: 'text-slate-600',
+          label: 'Pedido Excluído',
+        };
+      case 'order_reopened':
+        return {
+          icon: 'replay',
+          bg: 'bg-cyan-50/80 border-cyan-200 text-cyan-900',
+          iconColor: 'text-cyan-600',
+          label: 'Reaberto para Produção',
         };
       case 'urgency_requested':
         return {
@@ -68,8 +126,8 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
       case 'urgency_approved':
         return {
           icon: 'verified',
-          bg: 'bg-emerald-50 border-emerald-300 text-emerald-950',
-          iconColor: 'text-emerald-600',
+          bg: 'bg-teal-50 border-teal-300 text-teal-950',
+          iconColor: 'text-teal-600',
           label: 'Urgência Aprovada',
         };
       case 'urgency_rejected':
@@ -79,18 +137,11 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
           iconColor: 'text-rose-600',
           label: 'Urgência Recusada',
         };
-      case 'order_completed':
-        return {
-          icon: 'check_circle',
-          bg: 'bg-teal-50 border-teal-200 text-teal-900',
-          iconColor: 'text-teal-600',
-          label: 'Pedido Concluído',
-        };
       case 'user_pending':
         return {
           icon: 'person_add',
-          bg: 'bg-amber-50 border-amber-200 text-amber-900',
-          iconColor: 'text-amber-600',
+          bg: 'bg-purple-50 border-purple-200 text-purple-900',
+          iconColor: 'text-purple-600',
           label: 'Novo Acesso',
         };
       default:
@@ -108,7 +159,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
       <div className="w-full max-w-md bg-white h-full shadow-2xl p-6 border-l border-slate-200 flex flex-col justify-between animate-slideLeft">
         <div className="flex flex-col h-full min-h-0">
           {/* Header */}
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100 shrink-0">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center relative">
                 <span className="material-symbols-outlined text-xl">notifications</span>
@@ -140,12 +191,25 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
             </button>
           </div>
 
+          {/* User Independence Banner */}
+          <div className="py-2 px-3 my-2 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="material-symbols-outlined text-sm text-blue-600 shrink-0">person</span>
+              <span className="text-[11px] font-bold text-slate-700 truncate">
+                Perfil: <span className="text-blue-700">{userName}</span>
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500 font-medium shrink-0 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+              Visualização individual
+            </span>
+          </div>
+
           {/* Quick Filters & Actions */}
-          <div className="py-3 flex items-center justify-between gap-2 border-b border-slate-100 shrink-0 text-xs">
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+          <div className="py-2 flex items-center justify-between gap-2 border-b border-slate-100 shrink-0 text-xs">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-[280px]">
               <button
                 onClick={() => setFilterType('all')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap text-[11px] ${
                   filterType === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
@@ -153,20 +217,28 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
               </button>
               <button
                 onClick={() => setFilterType('urgency')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap text-[11px] ${
                   filterType === 'urgency' ? 'bg-white text-amber-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <span className="material-symbols-outlined text-sm text-amber-500">bolt</span>
+                <span className="material-symbols-outlined text-xs text-amber-500">bolt</span>
                 <span>Urgências</span>
               </button>
               <button
                 onClick={() => setFilterType('orders')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap text-[11px] ${
                   filterType === 'orders' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
                 Pedidos
+              </button>
+              <button
+                onClick={() => setFilterType('status')}
+                className={`px-2 py-1 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap text-[11px] ${
+                  filterType === 'status' ? 'bg-white text-rose-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Status / Baixas
               </button>
             </div>
 
@@ -174,6 +246,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
               <button
                 onClick={onMarkAllAsRead}
                 className="text-[11px] text-blue-600 hover:text-blue-800 font-bold transition-colors cursor-pointer"
+                title="Marcar todas como lidas apenas no meu perfil"
               >
                 Marcar lidas
               </button>
@@ -187,9 +260,9 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
                 <span className="material-symbols-outlined text-4xl text-slate-300 block mx-auto">
                   notifications_paused
                 </span>
-                <p className="text-xs font-bold text-slate-700">Nenhuma notificação encontrada</p>
+                <p className="text-xs font-bold text-slate-700">Nenhuma notificação na sua lista</p>
                 <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                  Ações como entrada de novos pedidos, agendamento de data de produção e aprovação ou recusa de urgências aparecerão aqui automaticamente.
+                  Ações como entrada de novos pedidos, agendamento de data de produção e aprovação ou recusa de urgências aparecerão aqui em tempo real.
                 </p>
               </div>
             ) : (
@@ -243,7 +316,7 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
                               onDeleteNotification(n.id);
                             }}
                             className="p-1 hover:bg-slate-200/80 rounded text-slate-400 hover:text-red-600 transition-colors"
-                            title="Remover notificação"
+                            title="Remover apenas da minha lista"
                           >
                             <span className="material-symbols-outlined text-sm">delete</span>
                           </button>
@@ -264,14 +337,18 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
 
           {/* Footer */}
           {notifications.length > 0 && (
-            <div className="pt-3 border-t border-slate-100 shrink-0">
+            <div className="pt-3 border-t border-slate-100 shrink-0 space-y-1.5">
               <button
                 onClick={onClearNotifications}
                 className="w-full py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                title="Limpar notificações apenas para o seu usuário (outros usuários continuarão vendo)"
               >
                 <span className="material-symbols-outlined text-sm">cleaning_services</span>
-                <span>Limpar Notificações</span>
+                <span>Limpar Minhas Notificações</span>
               </button>
+              <p className="text-[10px] text-center text-slate-400 font-medium">
+                Esta ação limpa a lista somente para o seu perfil. Os demais usuários continuam com as notificações normais.
+              </p>
             </div>
           )}
         </div>
@@ -279,3 +356,4 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
     </div>
   );
 };
+

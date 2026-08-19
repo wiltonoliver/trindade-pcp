@@ -216,60 +216,78 @@ REGRA CRÍTICA DE EXTRAÇÃO:
 - NUNCA agrupe ou omita linhas.
 - Se o campo "deliveryDate" não for citado no texto, atribua o valor "${deliveryDate || ""}".`;
 
-        const response = await ai.models.generateContent({
-          model: "gemini-3.6-flash",
-          contents: prompt,
-          config: {
-            systemInstruction:
-              "Você é a IA assistente do FactoryOps - Production Command. Seu objetivo é extrair pedidos industriais com altíssima precisão de textos de e-mail, WhatsApp ou planilhas CSV em português. Retorne estritamente o JSON configurado no esquema com TODOS os pedidos encontrados.",
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                orders: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      orderId: { type: Type.STRING },
-                      store: { type: Type.STRING },
-                      itemDescription: { type: Type.STRING },
-                      quantity: { type: Type.NUMBER },
-                      unit: { type: Type.STRING },
-                      priority: { type: Type.STRING },
-                      productionDate: { type: Type.STRING },
-                      deliveryDate: { type: Type.STRING },
-                      notes: { type: Type.STRING }
+        let jsonText = "";
+        const modelsToTry = ["gemini-3.7-flash", "gemini-3.1-flash-lite"];
+
+        for (const modelName of modelsToTry) {
+          try {
+            const response = await ai.models.generateContent({
+              model: modelName,
+              contents: prompt,
+              config: {
+                systemInstruction:
+                  "Você é a IA assistente do FactoryOps - Production Command. Seu objetivo é extrair pedidos industriais com altíssima precisão de textos de e-mail, WhatsApp ou planilhas CSV em português. Retorne estritamente o JSON configurado no esquema com TODOS os pedidos encontrados.",
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    orders: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          orderId: { type: Type.STRING },
+                          store: { type: Type.STRING },
+                          itemDescription: { type: Type.STRING },
+                          quantity: { type: Type.NUMBER },
+                          unit: { type: Type.STRING },
+                          priority: { type: Type.STRING },
+                          productionDate: { type: Type.STRING },
+                          deliveryDate: { type: Type.STRING },
+                          notes: { type: Type.STRING }
+                        },
+                        required: ["orderId", "store", "itemDescription", "quantity"]
+                      }
                     },
-                    required: ["orderId", "store", "itemDescription", "quantity"]
-                  }
-                },
-                summary: { type: Type.STRING }
-              },
-              required: ["orders", "summary"]
+                    summary: { type: Type.STRING }
+                  },
+                  required: ["orders", "summary"]
+                }
+              }
+            });
+
+            if (response.text) {
+              jsonText = response.text;
+              break;
+            }
+          } catch (modelErr: any) {
+            // If temporary 503/429, continue to next fallback model
+            const isTemporary = modelErr?.status === 503 || modelErr?.status === 429 || String(modelErr).includes("503");
+            if (!isTemporary) {
+              break;
             }
           }
-        });
-
-        const jsonText = response.text || "{}";
-        const parsedData = JSON.parse(jsonText);
-
-        if (parsedData.orders && parsedData.orders.length > 0) {
-          const cleanedOrders = parsedData.orders.map((o: any) => ({
-            ...o,
-            orderId: o.orderId ? (o.orderId.startsWith('#') ? o.orderId : `#${o.orderId}`) : `#ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-            unit: sanitizeUnit(o.unit),
-            productionDate: o.productionDate && !o.productionDate.toLowerCase().includes('hoje') ? o.productionDate : 'Aguardando Data',
-            deliveryDate: o.deliveryDate || deliveryDate || '',
-          }));
-          return NextResponse.json({
-            success: true,
-            orders: cleanedOrders,
-            summary: parsedData.summary || `Foram identificados ${cleanedOrders.length} pedidos com sucesso.`
-          });
         }
-      } catch (geminiError) {
-        console.warn("Gemini API fallthrough to fallback parser:", geminiError);
+
+        if (jsonText) {
+          const parsedData = JSON.parse(jsonText);
+          if (parsedData.orders && parsedData.orders.length > 0) {
+            const cleanedOrders = parsedData.orders.map((o: any) => ({
+              ...o,
+              orderId: o.orderId ? (o.orderId.startsWith('#') ? o.orderId : `#${o.orderId}`) : `#ORD-${Math.floor(1000 + Math.random() * 9000)}`,
+              unit: sanitizeUnit(o.unit),
+              productionDate: o.productionDate && !o.productionDate.toLowerCase().includes('hoje') ? o.productionDate : 'Aguardando Data',
+              deliveryDate: o.deliveryDate || deliveryDate || '',
+            }));
+            return NextResponse.json({
+              success: true,
+              orders: cleanedOrders,
+              summary: parsedData.summary || `Foram identificados ${cleanedOrders.length} pedidos com sucesso.`
+            });
+          }
+        }
+      } catch {
+        // Silently proceed to deterministic fallback parser
       }
     }
 

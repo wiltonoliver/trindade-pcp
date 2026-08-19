@@ -1,5 +1,50 @@
-import { AppNotification, NotificationType } from '@/types/factory';
+import { AppNotification, NotificationType, UserProfile } from '@/types/factory';
 import { saveNotificationToFirestore, deleteNotificationFromFirestore } from './firestoreSync';
+
+/**
+ * Obtém a chave identificadora única do usuário para controle independente de notificações
+ */
+export const getUserNotificationKey = (user?: UserProfile | null): string => {
+  if (!user) return 'default_user';
+  if (user.id && user.id.trim()) return user.id.trim().toLowerCase();
+  if (user.email && user.email.trim()) return user.email.trim().toLowerCase();
+  if (user.name && user.name.trim()) return user.name.trim().toLowerCase().replace(/\s+/g, '_');
+  return 'default_user';
+};
+
+/**
+ * Verifica se uma notificação é visível para um determinado usuário (ou seja, se o usuário não a limpou/removeu)
+ */
+export const isNotificationVisibleForUser = (
+  notif: AppNotification,
+  userKey: string,
+  localClearedIds?: Set<string>
+): boolean => {
+  if (localClearedIds && localClearedIds.has(notif.id)) {
+    return false;
+  }
+  if (notif.clearedBy && Array.isArray(notif.clearedBy) && notif.clearedBy.includes(userKey)) {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Verifica se a notificação já foi lida por esse usuário específico
+ */
+export const isNotificationReadForUser = (
+  notif: AppNotification,
+  userKey: string,
+  localReadIds?: Set<string>
+): boolean => {
+  if (localReadIds && localReadIds.has(notif.id)) {
+    return true;
+  }
+  if (notif.readBy && Array.isArray(notif.readBy) && notif.readBy.includes(userKey)) {
+    return true;
+  }
+  return false;
+};
 
 /**
  * Cria e dispara uma nova notificação do sistema (salvando no Firestore e localStorage)
@@ -26,6 +71,8 @@ export const emitNotification = async (params: {
     time,
     timestamp: Date.now(),
     read: false,
+    readBy: [],
+    clearedBy: [],
     orderId: params.orderId,
     storeName: params.storeName,
     actor: params.actor,
@@ -63,25 +110,171 @@ export const emitNotification = async (params: {
 /**
  * Notificação de Pedido Recebido no sistema
  */
-export const notifyOrderReceived = (orderId: string, storeName: string, description?: string) => {
+export const notifyOrderReceived = (orderId: string, storeName: string, description?: string, actor?: string) => {
   return emitNotification({
-    title: `📦 Pedido Recebido (OP #${orderId})`,
-    message: `O pedido OP #${orderId} da loja ${storeName}${description ? ` (${description})` : ''} foi recebido e aguarda agendamento.`,
+    title: `📦 Pedido Recebido (OP #${orderId.replace(/^#/, '')})`,
+    message: `O pedido OP #${orderId.replace(/^#/, '')} da loja ${storeName}${description ? ` (${description})` : ''} foi registrado no sistema${actor ? ` por ${actor}` : ''}.`,
     type: 'order_received',
-    orderId,
+    orderId: orderId.replace(/^#/, ''),
     storeName,
+    actor,
   });
 };
 
 /**
- * Notificação de Data de Produção Programada/Definida
+ * Notificação de Lote de Pedidos Recebidos
  */
-export const notifyProductionDateSet = (orderId: string, storeName: string, productionDate: string, actor?: string) => {
+export const notifyBatchOrdersReceived = (count: number, storeName?: string, actor?: string) => {
   return emitNotification({
-    title: `📅 Data de Produção Definida (OP #${orderId})`,
-    message: `A OP #${orderId} (${storeName}) teve sua data de produção agendada para ${productionDate}${actor ? ` por ${actor}` : ''}.`,
+    title: `📦 ${count} Novos Pedidos Recebidos`,
+    message: `${count} novos pedidos ${storeName ? `da loja ${storeName} ` : ''}foram cadastrados no sistema${actor ? ` por ${actor}` : ''} e aguardam programação.`,
+    type: 'order_received',
+    storeName,
+    actor,
+  });
+};
+
+/**
+ * Notificação de Data de Produção Programada/Definida (1ª vez / saindo de aguardando data)
+ */
+export const notifyProductionScheduled = (orderId: string, storeName: string, productionDate: string, actor?: string) => {
+  return emitNotification({
+    title: `📅 Produção Agendada (OP #${orderId.replace(/^#/, '')})`,
+    message: `A OP #${orderId.replace(/^#/, '')} (${storeName}) foi agendada para produção em ${productionDate}${actor ? ` por ${actor}` : ''}.`,
     type: 'production_date_set',
-    orderId,
+    orderId: orderId.replace(/^#/, ''),
+    storeName,
+    actor,
+  });
+};
+
+// Backward-compatible alias
+export const notifyProductionDateSet = notifyProductionScheduled;
+
+/**
+ * Notificação de Produção Reagendada (Mudança de Data de Produção)
+ */
+export const notifyProductionRescheduled = (
+  orderId: string,
+  storeName: string,
+  newDate: string,
+  previousDate?: string,
+  reason?: string,
+  actor?: string
+) => {
+  const fromText = previousDate && previousDate !== 'Aguardando Data' ? ` de ${previousDate}` : '';
+  const reasonText = reason ? `. Motivo: "${reason}"` : '';
+  return emitNotification({
+    title: `🔄 Produção Reagendada (OP #${orderId.replace(/^#/, '')})`,
+    message: `A OP #${orderId.replace(/^#/, '')} (${storeName}) foi reagendada${fromText} para o dia ${newDate}${actor ? ` por ${actor}` : ''}${reasonText}.`,
+    type: 'production_rescheduled',
+    orderId: orderId.replace(/^#/, ''),
+    storeName,
+    actor,
+  });
+};
+
+/**
+ * Notificação de Pedido Concluído (100% Baixa de Produção)
+ */
+export const notifyOrderCompleted = (orderId: string, storeName: string, actor?: string) => {
+  return emitNotification({
+    title: `🎉 Produção Concluída (OP #${orderId.replace(/^#/, '')})`,
+    message: `A OP #${orderId.replace(/^#/, '')} (${storeName}) foi 100% concluída na fábrica${actor ? ` por ${actor}` : ''}.`,
+    type: 'order_completed',
+    orderId: orderId.replace(/^#/, ''),
+    storeName,
+    actor,
+  });
+};
+
+/**
+ * Notificação de Baixa Coletiva / Em Lote
+ */
+export const notifyBatchOrdersCompleted = (count: number, actor?: string) => {
+  return emitNotification({
+    title: `🎉 Baixa Coletiva Concluída (${count} OPs)`,
+    message: `${count} ordens de produção receberam baixa de conclusão${actor ? ` por ${actor}` : ''}.`,
+    type: 'order_completed',
+    actor,
+  });
+};
+
+/**
+ * Notificação de Não Concluído - Aguardando Nova Data
+ */
+export const notifyOrderNotCompletedPendingDate = (
+  orderId: string,
+  storeName: string,
+  reason?: string,
+  actor?: string
+) => {
+  const reasonText = reason ? `. Motivo informado: "${reason}"` : '';
+  return emitNotification({
+    title: `⏳ Não Concluído - Aguardando Nova Data (OP #${orderId.replace(/^#/, '')})`,
+    message: `A OP #${orderId.replace(/^#/, '')} (${storeName}) não foi concluída e retornou para a fila de Aguardando Data${actor ? ` por ${actor}` : ''}${reasonText}.`,
+    type: 'order_not_completed_pending',
+    orderId: orderId.replace(/^#/, ''),
+    storeName,
+    actor,
+  });
+};
+
+/**
+ * Notificação de Não Concluído - Excluído / Descartado
+ */
+export const notifyOrderNotCompletedDeleted = (
+  orderId: string,
+  storeName: string,
+  reason?: string,
+  actor?: string
+) => {
+  const reasonText = reason ? `. Motivo do descarte: "${reason}"` : '';
+  return emitNotification({
+    title: `🚫 Não Concluído / Excluído (OP #${orderId.replace(/^#/, '')})`,
+    message: `A OP #${orderId.replace(/^#/, '')} (${storeName}) não foi concluída e foi excluída do fluxo de fabricação${actor ? ` por ${actor}` : ''}${reasonText}.`,
+    type: 'order_not_completed_deleted',
+    orderId: orderId.replace(/^#/, ''),
+    storeName,
+    actor,
+  });
+};
+
+/**
+ * Notificação de Pedido Excluído do Sistema
+ */
+export const notifyOrderDeleted = (
+  orderId: string,
+  storeName: string,
+  actor?: string,
+  reason?: string
+) => {
+  const reasonText = reason ? `. Motivo: "${reason}"` : '';
+  return emitNotification({
+    title: `🗑️ Pedido Excluído (OP #${orderId.replace(/^#/, '')})`,
+    message: `O pedido OP #${orderId.replace(/^#/, '')} (${storeName}) foi excluído do sistema${actor ? ` por ${actor}` : ''}${reasonText}.`,
+    type: 'order_deleted',
+    orderId: orderId.replace(/^#/, ''),
+    storeName,
+    actor,
+  });
+};
+
+/**
+ * Notificação de Pedido Reaberto para Produção / Refazer
+ */
+export const notifyOrderReopened = (
+  orderId: string,
+  storeName: string,
+  actor?: string,
+  reason?: string
+) => {
+  const reasonText = reason ? `. Motivo: "${reason}"` : '';
+  return emitNotification({
+    title: `🔁 Pedido Reaberto para Refazer (OP #${orderId.replace(/^#/, '')})`,
+    message: `A OP #${orderId.replace(/^#/, '')} (${storeName}) foi reaberta para nova produção na fábrica${actor ? ` por ${actor}` : ''}${reasonText}.`,
+    type: 'order_reopened',
+    orderId: orderId.replace(/^#/, ''),
     storeName,
     actor,
   });
@@ -92,10 +285,10 @@ export const notifyProductionDateSet = (orderId: string, storeName: string, prod
  */
 export const notifyUrgencyRequested = (orderId: string, storeName: string, requestedBy: string, reason: string) => {
   return emitNotification({
-    title: `🚨 Solicitação de Urgência (OP #${orderId})`,
-    message: `${requestedBy} (Vendas) solicitou urgência para a OP #${orderId} (${storeName}). Motivo: "${reason}".`,
+    title: `🚨 Solicitação de Urgência (OP #${orderId.replace(/^#/, '')})`,
+    message: `${requestedBy} (Vendas) solicitou urgência para a OP #${orderId.replace(/^#/, '')} (${storeName}). Motivo: "${reason}".`,
     type: 'urgency_requested',
-    orderId,
+    orderId: orderId.replace(/^#/, ''),
     storeName,
     actor: requestedBy,
   });
@@ -106,10 +299,10 @@ export const notifyUrgencyRequested = (orderId: string, storeName: string, reque
  */
 export const notifyUrgencyApproved = (orderId: string, storeName: string, evaluatedBy: string, reason?: string) => {
   return emitNotification({
-    title: `✅ Urgência APROVADA (OP #${orderId})`,
-    message: `A solicitação de urgência para a OP #${orderId} (${storeName}) foi ACEITA por ${evaluatedBy}. O pedido foi promovido para ALTA PRIORIDADE!`,
+    title: `✅ Urgência APROVADA (OP #${orderId.replace(/^#/, '')})`,
+    message: `A solicitação de urgência para a OP #${orderId.replace(/^#/, '')} (${storeName}) foi ACEITA por ${evaluatedBy}. O pedido foi promovido para ALTA PRIORIDADE!`,
     type: 'urgency_approved',
-    orderId,
+    orderId: orderId.replace(/^#/, ''),
     storeName,
     actor: evaluatedBy,
   });
@@ -120,26 +313,12 @@ export const notifyUrgencyApproved = (orderId: string, storeName: string, evalua
  */
 export const notifyUrgencyRejected = (orderId: string, storeName: string, evaluatedBy: string, rejectionNote: string) => {
   return emitNotification({
-    title: `❌ Urgência RECUSADA (OP #${orderId})`,
-    message: `A solicitação de urgência para a OP #${orderId} (${storeName}) foi RECUSADA por ${evaluatedBy}. Motivo da recusa: "${rejectionNote}".`,
+    title: `❌ Urgência RECUSADA (OP #${orderId.replace(/^#/, '')})`,
+    message: `A solicitação de urgência para a OP #${orderId.replace(/^#/, '')} (${storeName}) foi RECUSADA por ${evaluatedBy}. Motivo da recusa: "${rejectionNote}".`,
     type: 'urgency_rejected',
-    orderId,
+    orderId: orderId.replace(/^#/, ''),
     storeName,
     actor: evaluatedBy,
-  });
-};
-
-/**
- * Notificação de Pedido Concluído
- */
-export const notifyOrderCompleted = (orderId: string, storeName: string, actor?: string) => {
-  return emitNotification({
-    title: `🎉 Pedido Concluído (OP #${orderId})`,
-    message: `A OP #${orderId} (${storeName}) foi finalizada 100% na fábrica${actor ? ` por ${actor}` : ''}.`,
-    type: 'order_completed',
-    orderId,
-    storeName,
-    actor,
   });
 };
 
