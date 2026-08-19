@@ -84,7 +84,7 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
   const [applyImageToAll, setApplyImageToAll] = useState<boolean>(true);
   const [isDraggingImage, setIsDraggingImage] = useState<boolean>(false);
   const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
-  const [lightboxData, setLightboxData] = useState<{ url: string; title: string; orderId?: string } | null>(null);
+  const [lightboxData, setLightboxData] = useState<{ url: string; title: string; orderId?: string; subtitle?: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const individualFileInputRef = useRef<HTMLInputElement>(null);
