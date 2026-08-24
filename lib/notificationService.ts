@@ -333,3 +333,60 @@ export const notifyUserPending = (userName: string, userEmail?: string) => {
     actor: userName,
   });
 };
+
+/**
+ * Notificação de Nova Solicitação de Matéria-Prima
+ */
+export const notifyMaterialRequested = (
+  code: string,
+  materialName: string,
+  quantity: number,
+  unit: string,
+  requestedBy: string,
+  sector?: string,
+  priority?: string
+) => {
+  const isUrgent = priority?.includes('ALTA');
+  return emitNotification({
+    title: `${isUrgent ? '🚨' : '📦'} Solicitação de Matéria-Prima (${code})`,
+    message: `${requestedBy} solicitou ${quantity} ${unit} de "${materialName}"${sector ? ` para o setor ${sector}` : ''}.${isUrgent ? ' (URGENTE)' : ''}`,
+    type: 'material_requested',
+    actor: requestedBy,
+  });
+};
+
+/**
+ * Notificação de Compra Realizada / Prazo Informado
+ */
+export const notifyMaterialPurchased = (
+  code: string,
+  materialName: string,
+  expectedDeliveryDate: string,
+  purchasedBy: string,
+  supplier?: string
+) => {
+  return emitNotification({
+    title: `🛒 Compra Realizada (${code})`,
+    message: `A compra de "${materialName}" foi confirmada por ${purchasedBy}${supplier ? ` (${supplier})` : ''}. Previsão de entrega: ${expectedDeliveryDate}.`,
+    type: 'material_purchased',
+    actor: purchasedBy,
+  });
+};
+
+/**
+ * Notificação de Matéria-Prima Recebida pela Expedição
+ */
+export const notifyMaterialReceived = (
+  code: string,
+  materialName: string,
+  receivedQuantity: number,
+  unit: string,
+  receivedBy: string
+) => {
+  return emitNotification({
+    title: `✅ Material Recebido na Fábrica (${code})`,
+    message: `A Expedição/Recebimento (${receivedBy}) deu baixa no recebimento de ${receivedQuantity} ${unit} de "${materialName}". Material disponível para produção!`,
+    type: 'material_received',
+    actor: receivedBy,
+  });
+};

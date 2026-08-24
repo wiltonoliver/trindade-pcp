@@ -117,7 +117,7 @@ export interface Store {
   status: 'Ativa' | 'Inativa';
 }
 
-export type ActiveTab = 'dashboard' | 'pending-checkouts' | 'pending-date' | 'order-entry' | 'productivity' | 'completed' | 'statistics' | 'history' | 'stores' | 'users' | 'reports' | 'labels' | 'expedition';
+export type ActiveTab = 'dashboard' | 'pending-checkouts' | 'pending-date' | 'order-entry' | 'raw-materials' | 'productivity' | 'completed' | 'statistics' | 'history' | 'stores' | 'users' | 'reports' | 'labels' | 'expedition';
 
 export type UserStatus = 'approved' | 'pending' | 'blocked';
 
@@ -129,6 +129,7 @@ export interface UserPermissions {
   canAccessOrderEntry?: boolean;
   canAccessPendingCheckouts?: boolean;
   canAccessPendingDate?: boolean;
+  canAccessRawMaterials?: boolean;
   canAccessDashboard?: boolean;
   canAccessProductivity?: boolean;
   canAccessCompleted?: boolean;
@@ -166,6 +167,9 @@ export type NotificationType =
   | 'urgency_requested'
   | 'urgency_approved'
   | 'urgency_rejected'
+  | 'material_requested'
+  | 'material_purchased'
+  | 'material_received'
   | 'user_pending'
   | 'system';
 
@@ -182,5 +186,41 @@ export interface AppNotification {
   actor?: string;
   readBy?: string[];
   clearedBy?: string[];
+}
+
+export type MaterialRequestStatus = 'pendente' | 'comprado' | 'recebido' | 'cancelado';
+export type MaterialPriority = 'ALTA PRIORIDADE' | 'NORMAL';
+
+export interface MaterialRequest {
+  id: string;
+  code: string; // Ex: REQ-1001
+  materialName: string;
+  category?: string; // Perfis de Alumínio, Vidros, Ferragens/Fechaduras, Acessórios/Borrachas, Fixadores, Insumos Gerais
+  quantity: number;
+  unit: string; // barras, kg, un, metros, chapas, rolos, caixas
+  priority: MaterialPriority;
+  sector?: string; // Linha de Montagem, Corte, Usinagem, Pintura, Vidraçaria, Expedição, Geral
+  linkedOrderId?: string; // OP vinculada opcional (ex: #5376)
+  notes?: string;
+  requestedBy: string;
+  requestedAt: string;
+  requestedTimestamp?: number;
+  imageUrl?: string;
+  status: MaterialRequestStatus;
+
+  // Informações de Compra (preenchidas pelo Gestor de Compras)
+  purchaseDate?: string;
+  supplier?: string;
+  expectedDeliveryDate?: string; // Prazo de entrega prometido pelo fornecedor
+  purchaseOrderNumber?: string; // Nº Pedido de Compra / NF do fornecedor
+  purchasedBy?: string;
+  purchaseNotes?: string;
+
+  // Informações de Recebimento (preenchidas pela Expedição / Almoxarifado)
+  receivedDate?: string;
+  receivedQuantity?: number;
+  receivedBy?: string;
+  receiptNotes?: string;
+  invoiceNumber?: string;
 }
 

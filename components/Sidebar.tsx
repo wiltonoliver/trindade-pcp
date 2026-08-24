@@ -10,6 +10,7 @@ interface SidebarProps {
   pendingCount?: number;
   pendingDateCount?: number;
   pendingCheckoutsCount?: number;
+  pendingRawMaterialsCount?: number;
   pendingUsersCount?: number;
   completedCount?: number;
   currentUser?: UserProfile | null;
@@ -24,6 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingCount = 0,
   pendingDateCount = 0,
   pendingCheckoutsCount = 0,
+  pendingRawMaterialsCount = 0,
   pendingUsersCount = 0,
   completedCount = 0,
   currentUser,
@@ -57,6 +59,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: pendingCheckoutsCount > 0 ? pendingCheckoutsCount : null,
       badgeColor: 'amber',
       permissionKey: 'canAccessPendingCheckouts' as keyof UserPermissions,
+    },
+    {
+      id: 'raw-materials' as ActiveTab,
+      label: 'Matéria-Prima & Compras',
+      icon: 'inventory_2',
+      badge: pendingRawMaterialsCount > 0 ? pendingRawMaterialsCount : null,
+      badgeColor: 'indigo',
+      permissionKey: 'canAccessRawMaterials' as keyof UserPermissions,
     },
     {
       id: 'dashboard' as ActiveTab,

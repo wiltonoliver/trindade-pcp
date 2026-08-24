@@ -144,6 +144,27 @@ export const NotificationsDrawer: React.FC<NotificationsDrawerProps> = ({
           iconColor: 'text-purple-600',
           label: 'Novo Acesso',
         };
+      case 'material_requested':
+        return {
+          icon: 'inventory_2',
+          bg: 'bg-amber-50/90 border-amber-200 text-amber-950',
+          iconColor: 'text-amber-600',
+          label: 'Matéria-Prima Solicitada',
+        };
+      case 'material_purchased':
+        return {
+          icon: 'shopping_bag',
+          bg: 'bg-blue-50/90 border-blue-200 text-blue-950',
+          iconColor: 'text-blue-600',
+          label: 'Compra Informada (Aguardando)',
+        };
+      case 'material_received':
+        return {
+          icon: 'mark_email_read',
+          bg: 'bg-emerald-50/90 border-emerald-200 text-emerald-950',
+          iconColor: 'text-emerald-600',
+          label: 'Material Recebido na Fábrica',
+        };
       default:
         return {
           icon: 'notifications',

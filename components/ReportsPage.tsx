@@ -39,9 +39,26 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
   const [selectedOperatorId, setSelectedOperatorId] = useState<string>('all');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [dateMode, setDateMode] = useState<DateFilterMode>('single');
-  const [singleDate, setSingleDate] = useState<string>('2026-07-23');
-  const [startDate, setStartDate] = useState<string>('2026-07-01');
-  const [endDate, setEndDate] = useState<string>('2026-07-31');
+  const [singleDate, setSingleDate] = useState<string>(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+  const [startDate, setStartDate] = useState<string>(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}-01`;
+  });
+  const [endDate, setEndDate] = useState<string>(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(year, today.getMonth() + 1, 0).getDate();
+    return `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+  });
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -753,8 +770,9 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       `}</style>
 
       {/* Screen Header (Interactive) */}
-      <div className="no-print bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 p-6 rounded-3xl text-white shadow-xl border border-slate-800 relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="no-print bg-gradient-to-r from-[#06245E] via-[#0a3580] to-[#06245E] p-6 rounded-3xl text-white shadow-xl border border-[#0d3f94]/40 relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-96 h-96 bg-blue-400/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute left-1/3 bottom-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
@@ -1100,16 +1118,32 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   {/* Items Table */}
                   <table className="w-full text-left border-collapse text-xs">
                     <tbody className="divide-y divide-slate-400 font-sans">
-                      {group.orders.map((ord, idx) => (
-                        <tr key={ord.id || idx}>
-                          <td className="p-2 pl-3 font-bold text-slate-900 text-xs">
-                            {ord.itemDescription}
-                          </td>
-                          <td className="p-2 pr-3 text-right font-black text-slate-900 text-sm whitespace-nowrap w-16">
-                            {ord.quantity || 1}
-                          </td>
-                        </tr>
-                      ))}
+                      {group.orders.map((ord, idx) => {
+                        const storePrefix = ord.store?.trim() ? `(${ord.store.trim()}) ` : '';
+                        const qty = ord.quantity || 1;
+                        const qtyPrefix = `${qty}x `;
+                        
+                        let cleanDesc = (ord.itemDescription || '').trim();
+                        // Remove duplicated store in parenthesis if already at beginning of description
+                        if (ord.store && cleanDesc.toLowerCase().startsWith(`(${ord.store.trim().toLowerCase()})`)) {
+                          cleanDesc = cleanDesc.slice(ord.store.trim().length + 2).trim();
+                        }
+                        // Remove any existing/repeated quantity prefixes at the beginning like "1x ", "1X ", "2 x ", "1 - ", etc.
+                        cleanDesc = cleanDesc.replace(/^(\d+\s*[xX\-]\s*)+/, '').trim();
+
+                        return (
+                          <tr key={ord.id || idx}>
+                            <td className="p-2 pl-3 font-bold text-slate-900 text-xs">
+                              {storePrefix && <span className="font-black text-slate-900">{storePrefix}</span>}
+                              <span className="font-extrabold text-slate-900">{qtyPrefix}</span>
+                              <span>{cleanDesc}</span>
+                            </td>
+                            <td className="p-2 pr-3 text-right font-black text-slate-900 text-sm whitespace-nowrap w-16">
+                              {qty}
+                            </td>
+                          </tr>
+                        );
+                      })}
 
                       {/* Soma Row */}
                       <tr className="bg-slate-200 font-black border-t-2 border-slate-900 text-xs">
@@ -1198,12 +1232,30 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                     </div>
                     <table className="w-full text-left border-collapse text-xs font-sans">
                       <tbody className="divide-y divide-slate-400">
-                        {group.orders.map((ord, idx) => (
-                          <tr key={ord.id || idx}>
-                            <td className="p-2 pl-3 font-bold text-slate-900">{ord.itemDescription}</td>
-                            <td className="p-2 pr-3 text-right font-black text-slate-900 w-16 whitespace-nowrap">{ord.quantity || 1}</td>
-                          </tr>
-                        ))}
+                        {group.orders.map((ord, idx) => {
+                          const storePrefix = ord.store?.trim() ? `(${ord.store.trim()}) ` : '';
+                          const qty = ord.quantity || 1;
+                          const qtyPrefix = `${qty}x `;
+                          
+                          let cleanDesc = (ord.itemDescription || '').trim();
+                          // Remove duplicated store in parenthesis if already at beginning of description
+                          if (ord.store && cleanDesc.toLowerCase().startsWith(`(${ord.store.trim().toLowerCase()})`)) {
+                            cleanDesc = cleanDesc.slice(ord.store.trim().length + 2).trim();
+                          }
+                          // Remove any existing/repeated quantity prefixes at the beginning like "1x ", "1X ", "2 x ", "1 - ", etc.
+                          cleanDesc = cleanDesc.replace(/^(\d+\s*[xX\-]\s*)+/, '').trim();
+
+                          return (
+                            <tr key={ord.id || idx}>
+                              <td className="p-2 pl-3 font-bold text-slate-900">
+                                {storePrefix && <span className="font-black text-slate-900">{storePrefix}</span>}
+                                <span className="font-extrabold text-slate-900">{qtyPrefix}</span>
+                                <span>{cleanDesc}</span>
+                              </td>
+                              <td className="p-2 pr-3 text-right font-black text-slate-900 w-16 whitespace-nowrap">{qty}</td>
+                            </tr>
+                          );
+                        })}
                         <tr className="bg-slate-200 font-black border-t-2 border-slate-900 text-xs">
                           <td className="p-2 pl-3 text-slate-900 uppercase">Soma</td>
                           <td className="p-2 pr-3 text-right text-slate-900">{group.totalQty}</td>

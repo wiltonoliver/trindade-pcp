@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator, AppNotification } from '@/types/factory';
-import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_OPERATORS } from '@/lib/factory-store';
+import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator, AppNotification, MaterialRequest } from '@/types/factory';
+import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_OPERATORS, INITIAL_MATERIAL_REQUESTS } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
 import { normalizeDateToDDMMYYYY, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
 import {
@@ -18,6 +18,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { PlanningDashboard } from '@/components/PlanningDashboard';
 import { OrderEntry } from '@/components/OrderEntry';
+import { RawMaterialRequests } from '@/components/RawMaterialRequests';
 import { DailyProductivity } from '@/components/DailyProductivity';
 import { StatisticsView } from '@/components/StatisticsView';
 import { ReplanningHistory } from '@/components/ReplanningHistory';
@@ -39,10 +40,13 @@ import {
   subscribeStores,
   subscribeOperators,
   subscribeNotifications,
+  subscribeMaterialRequests,
   saveOrderToFirestore,
   saveStoreToFirestore,
   saveOperatorToFirestore,
   saveNotificationToFirestore,
+  saveMaterialRequestToFirestore,
+  deleteMaterialRequestFromFirestore,
   deleteNotificationFromFirestore,
 } from '@/lib/firestoreSync';
 
@@ -70,6 +74,7 @@ export default function FactoryOpsApp() {
   const [orders, setOrders] = useState<OrderItem[]>(INITIAL_ORDERS);
   const [stores, setStores] = useState<Store[]>(INITIAL_STORES);
   const [operators, setOperators] = useState<AssemblyOperator[]>(INITIAL_OPERATORS);
+  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>(INITIAL_MATERIAL_REQUESTS);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -90,6 +95,7 @@ export default function FactoryOpsApp() {
       const savedOrders = localStorage.getItem('factoryops_orders');
       const savedStores = localStorage.getItem('factoryops_stores');
       const savedOperators = localStorage.getItem('factoryops_operators');
+      const savedMaterials = localStorage.getItem('factoryops_material_requests');
       const deletedOrderIdsStr = localStorage.getItem('trindade_deleted_order_ids');
       const deletedOrderIds: string[] = deletedOrderIdsStr ? JSON.parse(deletedOrderIdsStr) : [];
       const deletedStoreIdsStr = localStorage.getItem('trindade_deleted_store_ids');
@@ -153,6 +159,17 @@ export default function FactoryOpsApp() {
         }
       } else if (deletedOpIds.length > 0) {
         setOperators(INITIAL_OPERATORS.filter((op) => !deletedOpIds.includes(op.id)));
+      }
+
+      if (savedMaterials) {
+        try {
+          const parsedMaterials = JSON.parse(savedMaterials);
+          if (Array.isArray(parsedMaterials)) {
+            setMaterialRequests(parsedMaterials);
+          }
+        } catch (e) {
+          console.error('Error parsing saved material requests from localStorage', e);
+        }
       }
 
       setIsLoaded(true);
@@ -236,13 +253,58 @@ export default function FactoryOpsApp() {
       }
     });
 
+    const unsubMaterials = subscribeMaterialRequests((remoteMaterials) => {
+      if (remoteMaterials && remoteMaterials.length > 0) {
+        setMaterialRequests(remoteMaterials);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('factoryops_material_requests', JSON.stringify(remoteMaterials));
+        }
+      }
+    });
+
     return () => {
       unsubOrders();
       unsubStores();
       unsubOperators();
       unsubNotifications();
+      unsubMaterials();
     };
   }, [isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      localStorage.setItem('factoryops_material_requests', JSON.stringify(materialRequests));
+    }
+  }, [materialRequests, isLoaded]);
+
+  const handleSaveMaterialRequest = (req: MaterialRequest) => {
+    setMaterialRequests((prev) => {
+      const idx = prev.findIndex((m) => m.id === req.id);
+      let updated: MaterialRequest[];
+      if (idx >= 0) {
+        updated = [...prev];
+        updated[idx] = req;
+      } else {
+        updated = [req, ...prev];
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('factoryops_material_requests', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    saveMaterialRequestToFirestore(req).catch((e) => console.error('Error saving material request:', e));
+  };
+
+  const handleDeleteMaterialRequest = (id: string) => {
+    setMaterialRequests((prev) => {
+      const updated = prev.filter((m) => m.id !== id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('factoryops_material_requests', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    deleteMaterialRequestFromFirestore(id).catch((e) => console.error('Error deleting material request:', e));
+  };
 
   useEffect(() => {
     if (isLoaded) {
@@ -383,6 +445,8 @@ export default function FactoryOpsApp() {
     switch (tab) {
       case 'order-entry':
         return p.canAccessOrderEntry !== false;
+      case 'raw-materials':
+        return p.canAccessRawMaterials !== false;
       case 'pending-date':
         return p.canAccessPendingDate !== false;
       case 'pending-checkouts':
@@ -483,6 +547,7 @@ export default function FactoryOpsApp() {
   const pendingCheckoutsCount = orders.filter((o) =>
     isOrderOverdueForCheckoff(o.productionDate, o.executionStatus, o.progress)
   ).length;
+  const pendingRawMaterialsCount = materialRequests.filter((m) => m.status === 'pendente').length;
 
   // User-specific notification identification and preferences
   const userNotifKey = useMemo(() => getUserNotificationKey(currentUser), [currentUser]);
@@ -642,6 +707,12 @@ export default function FactoryOpsApp() {
       } else if (isTabAllowed('dashboard')) {
         setActiveTab('dashboard');
       }
+    } else if (n.type === 'material_requested' || n.type === 'material_purchased' || n.type === 'material_received') {
+      if (isTabAllowed('raw-materials')) {
+        setActiveTab('raw-materials');
+      } else if (isTabAllowed('dashboard')) {
+        setActiveTab('dashboard');
+      }
     }
     setIsNotificationsOpen(false);
   };
@@ -656,6 +727,7 @@ export default function FactoryOpsApp() {
         pendingDateCount={pendingDateCount}
         pendingCheckoutsCount={pendingCheckoutsCount}
         pendingUsersCount={pendingUsersCount}
+        pendingRawMaterialsCount={pendingRawMaterialsCount}
         completedCount={completedCount}
         currentUser={currentUser}
         onOpenLogin={() => {
@@ -743,6 +815,16 @@ export default function FactoryOpsApp() {
             stores={stores}
             onNavigateToStores={() => setActiveTab('stores')}
             defaultSelectedStore={selectedStoreForOrder}
+          />
+        )}
+
+        {activeTab === 'raw-materials' && isTabAllowed('raw-materials') && (
+          <RawMaterialRequests
+            requests={materialRequests}
+            currentUser={currentUser}
+            onSaveRequest={handleSaveMaterialRequest}
+            onDeleteRequest={handleDeleteMaterialRequest}
+            searchQuery={searchQuery}
           />
         )}
 

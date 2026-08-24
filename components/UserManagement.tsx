@@ -29,6 +29,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: true,
       canManageUsers: true,
       canAccessOrderEntry: true,
+      canAccessRawMaterials: true,
       canAccessPendingDate: true,
       canAccessPendingCheckouts: true,
       canAccessDashboard: true,
@@ -58,6 +59,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: true,
       canManageUsers: true,
       canAccessOrderEntry: true,
+      canAccessRawMaterials: true,
       canAccessPendingDate: true,
       canAccessPendingCheckouts: true,
       canAccessDashboard: true,
@@ -87,6 +89,7 @@ const INITIAL_USERS: UserProfile[] = [
       canManageStores: true,
       canManageUsers: false,
       canAccessOrderEntry: true,
+      canAccessRawMaterials: true,
       canAccessPendingDate: true,
       canAccessPendingCheckouts: true,
       canAccessDashboard: true,
@@ -118,6 +121,7 @@ const INITIAL_USERS: UserProfile[] = [
       canAccessOrderEntry: false,
       canAccessPendingDate: true,
       canAccessPendingCheckouts: true,
+      canAccessRawMaterials: true,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -147,6 +151,7 @@ const INITIAL_USERS: UserProfile[] = [
       canAccessOrderEntry: false,
       canAccessPendingDate: false,
       canAccessPendingCheckouts: false,
+      canAccessRawMaterials: false,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -175,6 +180,7 @@ const INITIAL_USERS: UserProfile[] = [
       canAccessOrderEntry: false,
       canAccessPendingDate: true,
       canAccessPendingCheckouts: true,
+      canAccessRawMaterials: true,
       canAccessDashboard: true,
       canAccessCompleted: true,
       canAccessProductivity: true,
@@ -270,6 +276,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     canAccessOrderEntry: true,
     canAccessPendingDate: true,
     canAccessPendingCheckouts: true,
+    canAccessRawMaterials: true,
     canAccessDashboard: true,
     canAccessCompleted: true,
     canAccessProductivity: true,
@@ -299,6 +306,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     canAccessOrderEntry: true,
     canAccessPendingDate: true,
     canAccessPendingCheckouts: true,
+    canAccessRawMaterials: true,
     canAccessDashboard: true,
     canAccessCompleted: true,
     canAccessProductivity: true,
@@ -451,6 +459,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         canAccessOrderEntry: true,
         canAccessPendingDate: true,
         canAccessPendingCheckouts: true,
+        canAccessRawMaterials: true,
         canAccessDashboard: true,
         canAccessProductivity: true,
         canAccessStores: true,
@@ -620,6 +629,9 @@ export const UserManagement: React.FC<UserManagementProps> = ({
       canManageStores: true,
       canManageUsers: true,
       canAccessOrderEntry: true,
+      canAccessPendingDate: true,
+      canAccessPendingCheckouts: true,
+      canAccessRawMaterials: true,
       canAccessDashboard: true,
       canAccessProductivity: true,
       canAccessStatistics: true,
@@ -1086,6 +1098,32 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           <div
                             className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
                               perms.canAccessOrderEntry !== false ? 'translate-x-4' : 'translate-x-0'
+                            }`}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Page: Matéria-Prima & Compras */}
+                      <div
+                        onClick={() => user.id && handleTogglePermission(user.id, 'canAccessRawMaterials')}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                          perms.canAccessRawMaterials !== false
+                            ? 'bg-amber-50/80 border-amber-200 text-amber-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-400 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+                          <span className="text-xs font-bold truncate">Matéria-Prima & Compras</span>
+                        </div>
+                        <div
+                          className={`w-8 h-4 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                            perms.canAccessRawMaterials !== false ? 'bg-amber-600' : 'bg-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full shadow-md transform transition-transform ${
+                              perms.canAccessRawMaterials !== false ? 'translate-x-4' : 'translate-x-0'
                             }`}
                           />
                         </div>
@@ -1967,7 +2005,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           canManageStores: true,
                           canManageUsers: true,
                           canAccessOrderEntry: true,
+                          canAccessPendingDate: true,
+                          canAccessPendingCheckouts: true,
+                          canAccessRawMaterials: true,
                           canAccessDashboard: true,
+                          canAccessCompleted: true,
                           canAccessProductivity: true,
                           canAccessStatistics: true,
                           canAccessStores: true,
@@ -1983,7 +2025,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           canManageStores: false,
                           canManageUsers: false,
                           canAccessOrderEntry: true,
+                          canAccessPendingDate: false,
+                          canAccessPendingCheckouts: false,
+                          canAccessRawMaterials: false,
                           canAccessDashboard: true,
+                          canAccessCompleted: true,
                           canAccessProductivity: true,
                           canAccessStatistics: false,
                           canAccessStores: false,
@@ -1999,7 +2045,11 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                           canManageStores: false,
                           canManageUsers: false,
                           canAccessOrderEntry: true,
+                          canAccessPendingDate: true,
+                          canAccessPendingCheckouts: true,
+                          canAccessRawMaterials: true,
                           canAccessDashboard: true,
+                          canAccessCompleted: true,
                           canAccessProductivity: true,
                           canAccessStatistics: true,
                           canAccessStores: false,
@@ -2080,6 +2130,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className="rounded text-emerald-600 focus:ring-emerald-500"
                     />
                     <span>Baixas Pendentes</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-indigo-700 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={newPermissions.canAccessRawMaterials !== false}
+                      onChange={(e) => setNewPermissions({ ...newPermissions, canAccessRawMaterials: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>Matéria-Prima & Compras</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
@@ -2335,6 +2395,16 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       className="rounded text-amber-600 focus:ring-amber-500"
                     />
                     <span>Baixas Pendentes</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-indigo-700 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={approvePermissions.canAccessRawMaterials !== false}
+                      onChange={(e) => setApprovePermissions({ ...approvePermissions, canAccessRawMaterials: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>Matéria-Prima & Compras</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">

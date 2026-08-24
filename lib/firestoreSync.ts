@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { OrderItem, Store, AssemblyOperator, UserProfile, AppNotification } from '@/types/factory';
+import { OrderItem, Store, AssemblyOperator, UserProfile, AppNotification, MaterialRequest } from '@/types/factory';
 
 /**
  * Escuta em tempo real a coleção de Pedidos no Firestore
@@ -246,7 +246,7 @@ export const saveNotificationToFirestore = async (notification: AppNotification)
 };
 
 /**
- * Remove uma notificação específica do Firestore
+ * Remove uma notificação do Firestore
  */
 export const deleteNotificationFromFirestore = async (notificationId: string) => {
   if (!notificationId) return;
@@ -254,6 +254,54 @@ export const deleteNotificationFromFirestore = async (notificationId: string) =>
     await deleteDoc(doc(db, 'notifications', notificationId));
   } catch (error) {
     console.error('Erro ao remover notificação do Firestore:', error);
+  }
+};
+
+/**
+ * Escuta em tempo real a coleção de Solicitações de Matéria-Prima no Firestore
+ */
+export const subscribeMaterialRequests = (onUpdate: (requests: MaterialRequest[]) => void) => {
+  const reqsRef = collection(db, 'material_requests');
+  return onSnapshot(
+    reqsRef,
+    (snapshot) => {
+      const list: MaterialRequest[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as MaterialRequest);
+      });
+      // Ordenar mais recentes primeiro
+      list.sort((a, b) => (b.requestedTimestamp || 0) - (a.requestedTimestamp || 0));
+      onUpdate(list);
+    },
+    (err) => {
+      console.error('Erro no ouvinte de Solicitações de Matéria-Prima do Firestore:', err);
+    }
+  );
+};
+
+/**
+ * Salva ou atualiza uma solicitação de matéria-prima no Firestore
+ */
+export const saveMaterialRequestToFirestore = async (request: MaterialRequest) => {
+  if (!request.id) return;
+  try {
+    const clean = sanitizeForFirestore(request);
+    const docRef = doc(db, 'material_requests', request.id);
+    await setDoc(docRef, clean, { merge: true });
+  } catch (error) {
+    console.error('Erro ao salvar solicitação de matéria-prima no Firestore:', error);
+  }
+};
+
+/**
+ * Remove uma solicitação de matéria-prima do Firestore
+ */
+export const deleteMaterialRequestFromFirestore = async (requestId: string) => {
+  if (!requestId) return;
+  try {
+    await deleteDoc(doc(db, 'material_requests', requestId));
+  } catch (error) {
+    console.error('Erro ao remover solicitação de matéria-prima do Firestore:', error);
   }
 };
 
