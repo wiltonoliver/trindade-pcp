@@ -64,10 +64,38 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
   const modalFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper date generators for partial rescheduling
+  const getTomorrowInputDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getFutureInputDate = (daysAhead: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Partial Production Local States
+  const [partialCompletedQty, setPartialCompletedQty] = useState<number>(() => {
+    const total = order?.quantity || 1;
+    return total > 1 ? total - 1 : 1;
+  });
+  const [partialRemainingAction, setPartialRemainingAction] = useState<'reschedule' | 'pending_date' | 'close'>('reschedule');
+  const [partialRescheduleDate, setPartialRescheduleDate] = useState<string>(() => getTomorrowInputDate());
+
   // Track current order ID to reset local state when order changes
   const [prevOrderId, setPrevOrderId] = useState<string | null>(null);
 
   if (order && order.id !== prevOrderId) {
+    const total = order.quantity || 1;
     setPrevOrderId(order.id);
     setSelectedStatus(order.executionStatus || (order.progress === 100 ? 'concluido' : 'nao_produzido'));
     setSelectedReason(order.delayReason || order.pendingReason || '');
@@ -79,6 +107,9 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     setEditableItemDescription(order.itemDescription || '');
     setEditableDeliveryDate(order.deliveryDate || '');
     setModalImage(order.imageUrl || null);
+    setPartialCompletedQty(total > 1 ? total - 1 : 1);
+    setPartialRemainingAction('reschedule');
+    setPartialRescheduleDate(getTomorrowInputDate());
   }
 
   const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,7 +174,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     interface FormattedAction {
       id: string;
-      type: 'pedido_recebido' | 'producao_agendada' | 'producao_concluida' | 'producao_nao_concluida' | 'producao_reagendada' | 'urgencia' | 'geral';
+      type: 'pedido_recebido' | 'producao_agendada' | 'producao_concluida' | 'producao_parcial' | 'producao_nao_concluida' | 'producao_reagendada' | 'urgencia' | 'geral';
       title: string;
       badgeLabel: string;
       badgeColorClass: string;
@@ -256,7 +287,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         note.toLowerCase().includes('baixa efetuada') ||
         note.toLowerCase().includes('baixa concluída');
 
-      if (isCompletedLog) {
+      if (isCompletedLog && status !== 'parcial' && !reason.toLowerCase().includes('parcial') && !note.toLowerCase().includes('parcial')) {
         actions.push({
           id: log.id || `comp-${idx}`,
           type: 'producao_concluida',
@@ -272,6 +303,34 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
           organizationScore: log.organizationScore,
           disciplineScore: log.disciplineScore,
           note: note && !note.toLowerCase().includes('baixa efetuada') && !note.toLowerCase().includes('concluid') ? note : undefined,
+        });
+        continue;
+      }
+
+      // 2.1 Status: Produção Parcial
+      const isPartialLog =
+        status === 'parcial' ||
+        reason.toLowerCase().includes('parcial') ||
+        note.toLowerCase().includes('parcial') ||
+        note.toLowerCase().includes('conclusão parcial');
+
+      if (isPartialLog) {
+        actions.push({
+          id: log.id || `part-${idx}`,
+          type: 'producao_parcial',
+          title: 'Status da Produção: Parcial',
+          badgeLabel: 'Produção Parcial',
+          badgeColorClass: 'bg-sky-50 text-sky-800 border-sky-200',
+          icon: 'pie_chart',
+          iconBgClass: 'bg-sky-100 text-sky-700',
+          author,
+          timestamp: displayTime,
+          timestampEpoch: logEpoch,
+          reason: reason && !reason.toLowerCase().includes('parcial') ? reason : undefined,
+          cleanlinessScore: log.cleanlinessScore,
+          organizationScore: log.organizationScore,
+          disciplineScore: log.disciplineScore,
+          note: note || undefined,
         });
         continue;
       }
@@ -360,7 +419,6 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       // 5. Status: Produção Não Concluída (com Motivo da não conclusão)
       const isNotCompleted =
         status === 'nao_produzido' ||
-        status === 'parcial' ||
         (reason && !reason.includes('Urgência') && !reason.includes('Cadastro') && !reason.includes('Imagem'));
 
       if (isNotCompleted) {
@@ -702,42 +760,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       minute: '2-digit',
     });
 
-    const authorName = currentUser?.name || 'Gestor de Operações';
-
-    // Calculate updated properties
-    let finalStatus: ExecutionStatus = 'pendente';
-    let finalProgress = order.progress;
-    let finalColumn = order.column;
-    let finalProdDate = order.productionDate;
-    let finalPendingReposition = order.isPendingReposition || false;
-    let actionType: 'status_update' | 'reschedule' | 'return_to_pending' = 'status_update';
-
-    if (selectedStatus === 'concluido') {
-      finalStatus = 'concluido';
-      finalProgress = 100;
-      finalPendingReposition = false;
-    } else if (selectedStatus === 'parcial') {
-      finalStatus = 'parcial';
-      finalProgress = 50;
-    } else if (selectedStatus === 'nao_produzido') {
-      finalStatus = 'nao_produzido';
-      finalProgress = order.progress === 100 ? 0 : order.progress;
-    } else if (selectedStatus === 'retornado_aguardando') {
-      finalStatus = 'nao_produzido';
-      finalProgress = 0;
-      finalColumn = 'nao_planejado';
-      finalProdDate = '';
-      finalPendingReposition = true;
-      actionType = 'return_to_pending';
-    }
-
-    if (returnToPendingDate && selectedStatus !== 'concluido') {
-      finalColumn = 'nao_planejado';
-      finalProdDate = '';
-      finalPendingReposition = true;
-      actionType = 'return_to_pending';
-    }
-
+    const authorName = currentUser?.name || currentUser?.role || 'Gestor de Operações';
+    const totalQty = order.quantity || 1;
     const effectiveReason = selectedReason || (selectedStatus === 'concluido' ? '' : 'Sem motivo especificado');
 
     // Notes for field changes if updated
@@ -759,23 +783,184 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         : fieldChangeNotes.join('; ');
     }
 
-    // Build history log entry with 5S scores
+    // 1. Status Concluído Total (100%)
+    if (selectedStatus === 'concluido') {
+      const newLog: OrderStatusHistoryLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: nowStr,
+        author: authorName,
+        status: 'concluido',
+        reason: 'Concluído',
+        note: combinedNote || `Baixa de produção 100% efetuada (${totalQty} ${sanitizeUnit(order.unit)}).`,
+        previousDate: order.productionDate || 'Aguardando Data',
+        actionType: 'status_update',
+        cleanlinessScore,
+        organizationScore,
+        disciplineScore,
+      };
+
+      const updatedOrder: OrderItem = {
+        ...order,
+        itemDescription: editableItemDescription.trim() || order.itemDescription,
+        deliveryDate: editableDeliveryDate.trim(),
+        imageUrl: modalImage || undefined,
+        images: modalImage ? [modalImage] : undefined,
+        executionStatus: 'concluido',
+        progress: 100,
+        delayReason: '',
+        pendingReason: '',
+        statusHistory: [newLog, ...(order.statusHistory || [])],
+        cleanlinessScore,
+        organizationScore,
+        disciplineScore,
+      };
+
+      onUpdateOrder(updatedOrder);
+      saveOrderToFirestore(updatedOrder);
+      notifyOrderCompleted(order.orderId, order.store, authorName);
+      onClose();
+      return;
+    }
+
+    // 2. Status Produção Parcial
+    if (selectedStatus === 'parcial') {
+      const completedQty = Math.max(1, Math.min(totalQty, partialCompletedQty));
+      const remainingQty = Math.max(0, totalQty - completedQty);
+      const targetReschedDate = formatToDisplayDate(partialRescheduleDate) || order.productionDate || 'Aguardando Data';
+
+      let destinationNote = '';
+      if (remainingQty === 0 || partialRemainingAction === 'close') {
+        destinationNote = `Baixa de produção parcial: ${completedQty} de ${totalQty} ${sanitizeUnit(order.unit)} concluídas. Pedido encerrado sem saldo pendente.`;
+      } else if (partialRemainingAction === 'reschedule') {
+        destinationNote = `Baixa de produção parcial: ${completedQty} de ${totalQty} ${sanitizeUnit(order.unit)} concluídas e liberadas. O saldo restante de ${remainingQty} ${sanitizeUnit(order.unit)} foi reagendado para ${targetReschedDate}.`;
+      } else if (partialRemainingAction === 'pending_date') {
+        destinationNote = `Baixa de produção parcial: ${completedQty} de ${totalQty} ${sanitizeUnit(order.unit)} concluídas e liberadas. O saldo restante de ${remainingQty} ${sanitizeUnit(order.unit)} foi retornado para a fila de "Aguardando Data".`;
+      }
+
+      const logNote = combinedNote ? `${destinationNote} | Motivo/Obs: ${combinedNote}` : destinationNote;
+
+      const mainLog: OrderStatusHistoryLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: nowStr,
+        author: authorName,
+        status: 'parcial',
+        reason: effectiveReason,
+        note: logNote,
+        previousDate: order.productionDate || 'Aguardando Data',
+        actionType: partialRemainingAction === 'reschedule' ? 'reschedule' : partialRemainingAction === 'pending_date' ? 'return_to_pending' : 'status_update',
+        cleanlinessScore,
+        organizationScore,
+        disciplineScore,
+      };
+
+      // The original order represents the completed quantity and is marked as finished
+      const updatedOrder: OrderItem = {
+        ...order,
+        itemDescription: editableItemDescription.trim() || order.itemDescription,
+        deliveryDate: editableDeliveryDate.trim(),
+        imageUrl: modalImage || undefined,
+        images: modalImage ? [modalImage] : undefined,
+        quantity: completedQty,
+        executionStatus: 'concluido',
+        progress: 100,
+        delayReason: '',
+        pendingReason: '',
+        statusHistory: [mainLog, ...(order.statusHistory || [])],
+        cleanlinessScore,
+        organizationScore,
+        disciplineScore,
+      };
+
+      onUpdateOrder(updatedOrder);
+      saveOrderToFirestore(updatedOrder);
+
+      // If remaining quantity exists and not closed, generate the split order for remaining pieces
+      if (remainingQty > 0 && partialRemainingAction !== 'close') {
+        const splitSuffix = Math.floor(100 + Math.random() * 900);
+        const splitOrderId = order.orderId.includes('-R') ? `${order.orderId}.${splitSuffix}` : `${order.orderId}-R`;
+        const isResched = partialRemainingAction === 'reschedule';
+
+        const remainingLog: OrderStatusHistoryLog = {
+          id: `log-${Date.now()}-split`,
+          timestamp: nowStr,
+          author: authorName,
+          status: isResched ? 'pendente' : 'retornado_aguardando',
+          reason: isResched ? `Produção Agendada para dia ${targetReschedDate}` : effectiveReason,
+          note: isResched
+            ? `Saldo restante de ${remainingQty} ${sanitizeUnit(order.unit)} desmembrado da OP #${order.orderId} (onde ${completedQty} foram concluídas). Reagendado para ${targetReschedDate}. Motivo da pendência: ${effectiveReason}`
+            : `Saldo restante de ${remainingQty} ${sanitizeUnit(order.unit)} desmembrado da OP #${order.orderId} retornado para a fila de Aguardando Data. Motivo: ${effectiveReason}`,
+          actionType: isResched ? 'reschedule' : 'return_to_pending',
+          previousDate: order.productionDate || 'Aguardando Data',
+        };
+
+        const remainingOrder: OrderItem = {
+          ...order,
+          id: `split-${order.id}-${Date.now()}`,
+          orderId: splitOrderId,
+          itemDescription: `${editableItemDescription.trim() || order.itemDescription} (Saldo ${remainingQty} un)`,
+          quantity: remainingQty,
+          column: isResched ? 'proximos_7_dias' : 'nao_planejado',
+          productionDate: isResched ? targetReschedDate : '',
+          executionStatus: isResched ? 'pendente' : 'nao_produzido',
+          progress: 0,
+          isPendingReposition: !isResched,
+          delayReason: effectiveReason,
+          pendingReason: effectiveReason,
+          statusHistory: [
+            remainingLog,
+            {
+              id: `log-${Date.now()}-orig-rec`,
+              timestamp: nowStr,
+              author: authorName,
+              status: 'pendente',
+              reason: 'Pedido Recebido',
+              note: `Saldo gerado a partir da OP #${order.orderId} para a loja ${order.store}. Quantidade: ${remainingQty} ${sanitizeUnit(order.unit)}.`,
+              actionType: 'status_update',
+            }
+          ],
+        };
+
+        saveOrderToFirestore(remainingOrder);
+
+        if (isResched) {
+          notifyUrgencyApproved(splitOrderId, order.store, authorName);
+        } else {
+          notifyOrderNotCompletedPendingDate(splitOrderId, order.store, effectiveReason, authorName);
+        }
+      }
+
+      onClose();
+      return;
+    }
+
+    // 3. Status Não Concluído / Retornado para Aguardando Data
+    let finalStatus: ExecutionStatus = 'nao_produzido';
+    let finalProgress = order.progress === 100 ? 0 : order.progress;
+    let finalColumn = order.column;
+    let finalProdDate = order.productionDate;
+    let finalPendingReposition = order.isPendingReposition || false;
+    let actionType: 'status_update' | 'reschedule' | 'return_to_pending' = 'status_update';
+
+    if (returnToPendingDate || selectedStatus === 'retornado_aguardando') {
+      finalColumn = 'nao_planejado';
+      finalProdDate = '';
+      finalPendingReposition = true;
+      actionType = 'return_to_pending';
+    }
+
     const newLog: OrderStatusHistoryLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: nowStr,
       author: authorName,
-      status: selectedStatus,
+      status: returnToPendingDate ? 'retornado_aguardando' : 'nao_produzido',
       reason: effectiveReason,
-      note: combinedNote || undefined,
+      note: combinedNote || (returnToPendingDate ? `Retornado para Aguardando Data. Motivo: ${effectiveReason}` : `Não concluído. Motivo: ${effectiveReason}`),
       previousDate: order.productionDate || 'Aguardando Data',
       actionType: actionType,
       cleanlinessScore,
       organizationScore,
       disciplineScore,
     };
-
-    const existingHistory = order.statusHistory || [];
-    const updatedHistory = [newLog, ...existingHistory];
 
     const updatedOrder: OrderItem = {
       ...order,
@@ -790,7 +975,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       isPendingReposition: finalPendingReposition,
       delayReason: effectiveReason,
       pendingReason: effectiveReason,
-      statusHistory: updatedHistory,
+      statusHistory: [newLog, ...(order.statusHistory || [])],
       cleanlinessScore,
       organizationScore,
       disciplineScore,
@@ -799,9 +984,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     onUpdateOrder(updatedOrder);
     saveOrderToFirestore(updatedOrder);
 
-    if (selectedStatus === 'concluido') {
-      notifyOrderCompleted(order.orderId, order.store, authorName);
-    } else if (selectedStatus === 'retornado_aguardando' || returnToPendingDate) {
+    if (returnToPendingDate || selectedStatus === 'retornado_aguardando') {
       notifyOrderNotCompletedPendingDate(order.orderId, order.store, effectiveReason, authorName);
     }
 
@@ -1223,214 +1406,481 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
             <>
               {/* Manager Action Selection */}
               <div className="space-y-3">
-            <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider">
-              1. Selecione o Novo Status do Pedido / OP
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => handleStatusChange('concluido')}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
-                  selectedStatus === 'concluido'
-                    ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-900'
-                    : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <span
-                  className={`material-symbols-outlined text-xl p-1.5 rounded-xl ${
-                    selectedStatus === 'concluido' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  check_circle
-                </span>
-                <div>
-                  <div className="font-bold text-xs">Concluído (100%)</div>
-                  <div className="text-[10px] text-slate-500">Esquadria montada e liberada</div>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleStatusChange('nao_produzido')}
-                className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
-                  selectedStatus === 'nao_produzido'
-                    ? 'bg-amber-50/80 border-amber-300 ring-2 ring-amber-500/10 text-amber-950'
-                    : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <span
-                  className={`material-symbols-outlined text-xl p-1.5 rounded-xl ${
-                    selectedStatus === 'nao_produzido' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500'
-                  }`}
-                >
-                  warning
-                </span>
-                <div>
-                  <div className="font-bold text-xs">Não Concluído / Com Problema</div>
-                  <div className="text-[10px] text-slate-500">Manter na data com relato de motivo</div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* 5S Operational Evaluation Section */}
-          <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-blue-600">fact_check</span>
-                <span>Avaliação de Limpeza, Organização e Disciplina</span>
-              </label>
-              <span className="text-[10px] text-slate-500 font-medium">Escala 1 a 5</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Limpeza */}
-              <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span className="flex items-center gap-1 text-slate-700">
-                    <span className="material-symbols-outlined text-[15px] text-cyan-600">cleaning_services</span>
-                    Limpeza
-                  </span>
-                  <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-black text-[11px]">
-                    {cleanlinessScore} / 5
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 justify-between">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={`clean-${star}`}
-                      type="button"
-                      onClick={() => setCleanlinessScore(star)}
-                      className={`flex-1 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-                        cleanlinessScore >= star
-                          ? 'bg-amber-400 text-slate-900 shadow-2xs font-black'
-                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                      }`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Organização */}
-              <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span className="flex items-center gap-1 text-slate-700">
-                    <span className="material-symbols-outlined text-[15px] text-indigo-600">inventory_2</span>
-                    Organização
-                  </span>
-                  <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-black text-[11px]">
-                    {organizationScore} / 5
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 justify-between">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={`org-${star}`}
-                      type="button"
-                      onClick={() => setOrganizationScore(star)}
-                      className={`flex-1 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-                        organizationScore >= star
-                          ? 'bg-amber-400 text-slate-900 shadow-2xs font-black'
-                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                      }`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Disciplina */}
-              <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span className="flex items-center gap-1 text-slate-700">
-                    <span className="material-symbols-outlined text-[15px] text-emerald-600">verified</span>
-                    Disciplina
-                  </span>
-                  <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-black text-[11px]">
-                    {disciplineScore} / 5
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 justify-between">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={`disc-${star}`}
-                      type="button"
-                      onClick={() => setDisciplineScore(star)}
-                      className={`flex-1 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-                        disciplineScore >= star
-                          ? 'bg-amber-400 text-slate-900 shadow-2xs font-black'
-                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
-                      }`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Reason Selection Section (For non-completed or reschedule) */}
-          {selectedStatus !== 'concluido' && (
-            <div className="space-y-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-200">
-              <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px] text-amber-700">report_problem</span>
-                <span>2. Motivo da Não Conclusão / Atraso</span>
-              </label>
-
-              <div className="flex flex-wrap gap-2">
-                {COMMON_REASONS.map((reason) => {
-                  const isSelected = selectedReason === reason;
-                  return (
-                    <button
-                      key={reason}
-                      type="button"
-                      onClick={() => handleSelectPresetReason(reason)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-amber-700 text-white shadow-sm'
-                          : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
-                      }`}
-                    >
-                      {reason}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Custom Detail Area */}
-              <div className="pt-2">
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                  Observação Detalhada do Gestor:
+                <label className="block text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  1. Selecione o Novo Status do Pedido / OP
                 </label>
-                <textarea
-                  rows={2}
-                  value={customNote}
-                  onChange={(e) => setCustomNote(e.target.value)}
-                  placeholder="Escreva observações adicionais sobre o atraso, medidas ou solução necessária..."
-                  className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Concluído Total */}
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange('concluido')}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                      selectedStatus === 'concluido'
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-900 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-lg p-1.5 rounded-xl shrink-0 ${
+                        selectedStatus === 'concluido' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      check_circle
+                    </span>
+                    <div>
+                      <div className="font-bold text-xs">Concluído Total</div>
+                      <div className="text-[10px] text-slate-500">100% das peças prontas</div>
+                    </div>
+                  </button>
+
+                  {/* Produção Parcial */}
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange('parcial')}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                      selectedStatus === 'parcial'
+                        ? 'bg-sky-50 border-sky-500 ring-2 ring-sky-500/20 text-sky-950 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-lg p-1.5 rounded-xl shrink-0 ${
+                        selectedStatus === 'parcial' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      pie_chart
+                    </span>
+                    <div>
+                      <div className="font-bold text-xs">Produção Parcial</div>
+                      <div className="text-[10px] text-slate-500">Parte feita + destino da sobra</div>
+                    </div>
+                  </button>
+
+                  {/* Não Concluído */}
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange('nao_produzido')}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                      selectedStatus === 'nao_produzido'
+                        ? 'bg-amber-50/90 border-amber-400 ring-2 ring-amber-500/20 text-amber-950 shadow-xs'
+                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-lg p-1.5 rounded-xl shrink-0 ${
+                        selectedStatus === 'nao_produzido' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      warning
+                    </span>
+                    <div>
+                      <div className="font-bold text-xs">Não Concluído</div>
+                      <div className="text-[10px] text-slate-500">Ocorrência / Relatar motivo</div>
+                    </div>
+                  </button>
+                </div>
               </div>
 
-              {/* Checkbox for date removal */}
-              <div className="pt-2 border-t border-amber-200/80 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="chk-return-pending"
-                  checked={returnToPendingDate}
-                  onChange={(e) => setReturnToPendingDate(e.target.checked)}
-                  className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
-                />
-                <label htmlFor="chk-return-pending" className="text-xs font-bold text-slate-800 cursor-pointer">
-                  Retornar esta OP para a lista de &quot;Aguardando Data&quot; (limpar data programada)
-                </label>
+              {/* 5S Operational Evaluation Section */}
+              <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-blue-600">fact_check</span>
+                    <span>Avaliação de Limpeza, Organização e Disciplina</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">Escala 1 a 5</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Limpeza */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                      <span className="flex items-center gap-1 text-slate-700">
+                        <span className="material-symbols-outlined text-[15px] text-cyan-600">cleaning_services</span>
+                        Limpeza
+                      </span>
+                      <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-black text-[11px]">
+                        {cleanlinessScore} / 5
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-between">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={`clean-${star}`}
+                          type="button"
+                          onClick={() => setCleanlinessScore(star)}
+                          className={`flex-1 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                            cleanlinessScore >= star
+                              ? 'bg-amber-400 text-slate-900 shadow-2xs font-black'
+                              : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Organização */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                      <span className="flex items-center gap-1 text-slate-700">
+                        <span className="material-symbols-outlined text-[15px] text-indigo-600">inventory_2</span>
+                        Organização
+                      </span>
+                      <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-black text-[11px]">
+                        {organizationScore} / 5
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-between">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={`org-${star}`}
+                          type="button"
+                          onClick={() => setOrganizationScore(star)}
+                          className={`flex-1 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                            organizationScore >= star
+                              ? 'bg-amber-400 text-slate-900 shadow-2xs font-black'
+                              : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Disciplina */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                      <span className="flex items-center gap-1 text-slate-700">
+                        <span className="material-symbols-outlined text-[15px] text-emerald-600">verified</span>
+                        Disciplina
+                      </span>
+                      <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-black text-[11px]">
+                        {disciplineScore} / 5
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 justify-between">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={`disc-${star}`}
+                          type="button"
+                          onClick={() => setDisciplineScore(star)}
+                          className={`flex-1 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                            disciplineScore >= star
+                              ? 'bg-amber-400 text-slate-900 shadow-2xs font-black'
+                              : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                          }`}
+                        >
+                          ★
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+
+              {/* SPECIFIC CONFIGURATION FOR PARTIAL PRODUCTION */}
+              {selectedStatus === 'parcial' && (
+                <div className="space-y-4 bg-sky-50/70 p-4.5 rounded-2xl border border-sky-200">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-xs font-bold text-sky-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[18px] text-sky-700">incomplete_circle</span>
+                      <span>2. Detalhamento da Produção Parcial</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-full border border-sky-200">
+                      Total do Pedido: {order.quantity || 1} {sanitizeUnit(order.unit)}
+                    </span>
+                  </div>
+
+                  {/* Quantity selector */}
+                  <div className="bg-white p-4 rounded-xl border border-sky-200/90 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block">
+                          Quantas peças foram concluídas e liberadas?
+                        </span>
+                        <span className="text-[11px] text-slate-500">
+                          Ajuste o número de peças finalizadas nesta etapa
+                        </span>
+                      </div>
+
+                      {/* Interactive Counter */}
+                      <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                        <button
+                          type="button"
+                          disabled={partialCompletedQty <= 1}
+                          onClick={() => setPartialCompletedQty((prev) => Math.max(1, prev - 1))}
+                          className="w-8 h-8 rounded-lg bg-white border border-slate-300 text-slate-700 font-black text-base hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center transition-all"
+                        >
+                          -
+                        </button>
+
+                        <div className="px-3 min-w-[64px] text-center">
+                          <input
+                            type="number"
+                            min={1}
+                            max={order.quantity || 1}
+                            value={partialCompletedQty}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val)) {
+                                setPartialCompletedQty(Math.max(1, Math.min(order.quantity || 1, val)));
+                              }
+                            }}
+                            className="w-12 text-center font-black text-base text-sky-950 focus:outline-none bg-transparent"
+                          />
+                          <span className="text-[10px] block font-bold text-slate-500 -mt-1">
+                            {sanitizeUnit(order.unit)}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={partialCompletedQty >= (order.quantity || 1)}
+                          onClick={() => setPartialCompletedQty((prev) => Math.min(order.quantity || 1, prev + 1))}
+                          className="w-8 h-8 rounded-lg bg-white border border-slate-300 text-slate-700 font-black text-base hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center transition-all"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Summary split badges */}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-emerald-600 text-base">check_circle</span>
+                        <div>
+                          <div className="text-[10px] font-bold text-emerald-700 uppercase">Peças Prontas</div>
+                          <div className="text-xs font-black text-emerald-950">
+                            {partialCompletedQty} {sanitizeUnit(order.unit)} (Liberadas)
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-amber-600 text-base">pending</span>
+                        <div>
+                          <div className="text-[10px] font-bold text-amber-700 uppercase">Saldo Restante</div>
+                          <div className="text-xs font-black text-amber-950">
+                            {Math.max(0, (order.quantity || 1) - partialCompletedQty)} {sanitizeUnit(order.unit)} (Pendente)
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Destination of remaining quantity */}
+                  {Math.max(0, (order.quantity || 1) - partialCompletedQty) > 0 && (
+                    <div className="space-y-2.5">
+                      <label className="block text-xs font-bold text-sky-950">
+                        O que fazer com as {Math.max(0, (order.quantity || 1) - partialCompletedQty)} peças restantes?
+                      </label>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {/* Option 1: Reagendar Produção */}
+                        <button
+                          type="button"
+                          onClick={() => setPartialRemainingAction('reschedule')}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer space-y-1 ${
+                            partialRemainingAction === 'reschedule'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-white text-slate-800 border-sky-200 hover:bg-sky-100/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold text-xs">
+                            <span className="material-symbols-outlined text-[16px]">event_repeat</span>
+                            <span>Reagendar</span>
+                          </div>
+                          <p className={`text-[10px] leading-snug ${partialRemainingAction === 'reschedule' ? 'text-blue-100' : 'text-slate-500'}`}>
+                            Agendar nova data para produzir o restante
+                          </p>
+                        </button>
+
+                        {/* Option 2: Voltar para Fila de Espera */}
+                        <button
+                          type="button"
+                          onClick={() => setPartialRemainingAction('pending_date')}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer space-y-1 ${
+                            partialRemainingAction === 'pending_date'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-white text-slate-800 border-sky-200 hover:bg-sky-100/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold text-xs">
+                            <span className="material-symbols-outlined text-[16px]">pending_actions</span>
+                            <span>Fila de Espera</span>
+                          </div>
+                          <p className={`text-[10px] leading-snug ${partialRemainingAction === 'pending_date' ? 'text-blue-100' : 'text-slate-500'}`}>
+                            Voltar saldo para &quot;Aguardando Data&quot;
+                          </p>
+                        </button>
+
+                        {/* Option 3: Encerrar */}
+                        <button
+                          type="button"
+                          onClick={() => setPartialRemainingAction('close')}
+                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer space-y-1 ${
+                            partialRemainingAction === 'close'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                              : 'bg-white text-slate-800 border-sky-200 hover:bg-sky-100/60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold text-xs">
+                            <span className="material-symbols-outlined text-[16px]">check_box</span>
+                            <span>Encerrar Pedido</span>
+                          </div>
+                          <p className={`text-[10px] leading-snug ${partialRemainingAction === 'close' ? 'text-blue-100' : 'text-slate-500'}`}>
+                            Finalizar sem produzir o saldo restante
+                          </p>
+                        </button>
+                      </div>
+
+                      {/* If reschedule selected, show date picker with quick presets */}
+                      {partialRemainingAction === 'reschedule' && (
+                        <div className="p-3 bg-white rounded-xl border border-sky-200 space-y-2 animate-fadeIn">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-sm text-blue-600">calendar_today</span>
+                              Data para produção do saldo restante ({Math.max(0, (order.quantity || 1) - partialCompletedQty)} un):
+                            </label>
+                            <span className="text-[10px] text-slate-500 font-semibold">
+                              (dd/mm/aaaa)
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <input
+                              type="date"
+                              value={formatToInputDate(partialRescheduleDate)}
+                              onChange={(e) => setPartialRescheduleDate(e.target.value)}
+                              className="p-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                            />
+
+                            {/* Quick buttons */}
+                            <button
+                              type="button"
+                              onClick={() => setPartialRescheduleDate(getTomorrowInputDate())}
+                              className="px-2.5 py-1.5 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-all"
+                            >
+                              Amanhã
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPartialRescheduleDate(getFutureInputDate(2))}
+                              className="px-2.5 py-1.5 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-all"
+                            >
+                              +2 dias
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPartialRescheduleDate(getFutureInputDate(7))}
+                              className="px-2.5 py-1.5 text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg cursor-pointer transition-all"
+                            >
+                              +7 dias
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Motivo da Parcialidade */}
+                  <div className="space-y-2 pt-1 border-t border-sky-200">
+                    <label className="block text-xs font-bold text-sky-950">
+                      Motivo de Não Ter Concluído Todas as Peças:
+                    </label>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {COMMON_REASONS.map((reason) => {
+                        const isSelected = selectedReason === reason;
+                        return (
+                          <button
+                            key={`part-reason-${reason}`}
+                            type="button"
+                            onClick={() => handleSelectPresetReason(reason)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-sky-800 text-white shadow-xs'
+                                : 'bg-white border border-sky-300 text-sky-900 hover:bg-sky-100'
+                            }`}
+                          >
+                            {reason}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <textarea
+                      rows={2}
+                      value={customNote}
+                      onChange={(e) => setCustomNote(e.target.value)}
+                      placeholder="Observações complementares sobre o motivo das peças faltantes..."
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* SPECIFIC CONFIGURATION FOR NON-COMPLETED / RETORNADO */}
+              {selectedStatus === 'nao_produzido' && (
+                <div className="space-y-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-200">
+                  <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-amber-700">report_problem</span>
+                    <span>2. Motivo da Não Conclusão / Ocorrência</span>
+                  </label>
+
+                  <div className="flex flex-wrap gap-2">
+                    {COMMON_REASONS.map((reason) => {
+                      const isSelected = selectedReason === reason;
+                      return (
+                        <button
+                          key={reason}
+                          type="button"
+                          onClick={() => handleSelectPresetReason(reason)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-700 text-white shadow-sm'
+                              : 'bg-white border border-amber-300 text-amber-900 hover:bg-amber-100'
+                          }`}
+                        >
+                          {reason}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Detail Area */}
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Observação Detalhada do Gestor:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={customNote}
+                      onChange={(e) => setCustomNote(e.target.value)}
+                      placeholder="Escreva observações adicionais sobre o atraso, medidas ou solução necessária..."
+                      className="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Checkbox for date removal */}
+                  <div className="pt-2 border-t border-amber-200/80 flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="chk-return-pending"
+                      checked={returnToPendingDate}
+                      onChange={(e) => setReturnToPendingDate(e.target.checked)}
+                      className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <label htmlFor="chk-return-pending" className="text-xs font-bold text-slate-800 cursor-pointer">
+                      Retornar esta OP para a lista de &quot;Aguardando Data&quot; (limpar data programada)
+                    </label>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -1509,6 +1959,18 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                           <p className="font-semibold text-xs text-rose-950 pl-5">
                             {log.reason}
                           </p>
+                        </div>
+                      )}
+
+                      {/* Detalhes de Produção Parcial */}
+                      {log.type === 'producao_parcial' && (
+                        <div className="p-2.5 bg-sky-50 rounded-lg border border-sky-200 text-sky-950 space-y-1">
+                          {log.reason && log.reason !== 'Sem motivo especificado' && (
+                            <div className="text-[11px] font-semibold text-sky-900 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px] text-sky-700">report_problem</span>
+                              <span>Motivo da Parcialidade: <strong>{log.reason}</strong></span>
+                            </div>
+                          )}
                         </div>
                       )}
 

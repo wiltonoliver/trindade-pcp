@@ -158,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`bg-[#06245E] text-slate-100 h-screen w-[260px] fixed left-0 top-0 flex flex-col py-6 z-50 shadow-xl border-r border-[#0d3682]/60 select-none transition-transform duration-300 ease-in-out ${
+        className={`bg-[#011627] text-slate-100 h-screen w-[260px] fixed left-0 top-0 flex flex-col py-6 z-50 shadow-2xl border-r border-[#0d2847]/80 select-none transition-transform duration-300 ease-in-out ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -169,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={onCloseMobile}
-              className="lg:hidden text-blue-300/80 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+              className="lg:hidden text-blue-200/80 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
               title="Fechar menu"
             >
               <span className="material-symbols-outlined text-2xl">close</span>
@@ -190,14 +190,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all duration-150 ease-in-out font-medium group text-left cursor-pointer ${
                   isActive
-                    ? 'bg-white/10 text-white font-semibold border-l-4 border-emerald-400 shadow-xs'
-                    : 'text-blue-100/75 hover:text-white hover:bg-white/5 border-l-4 border-transparent'
+                    ? 'bg-white text-[#011627] font-bold shadow-md shadow-black/25'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
                 }`}
               >
               <div className="flex items-center gap-3">
                 <span
                   className={`material-symbols-outlined text-[20px] transition-transform duration-150 ${
-                    isActive ? 'scale-110 text-emerald-400' : 'text-blue-200/70 group-hover:text-white'
+                    isActive ? 'scale-110 text-[#011627] font-bold' : 'text-slate-400 group-hover:text-white'
                   }`}
                 >
                   {item.icon}
@@ -206,9 +206,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               {item.badge !== null && (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                  item.badgeColor === 'amber'
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                    : 'bg-[#041a45] text-blue-200 border-[#0d3682]'
+                  isActive
+                    ? 'bg-[#011627]/10 text-[#011627] border-[#011627]/20'
+                    : item.badgeColor === 'amber'
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 font-black'
+                    : 'bg-[#0b2038] text-slate-200 border-[#153459]'
                 }`}>
                   {item.badge}
                 </span>
@@ -219,37 +221,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* System Status & User Profile Footer */}
-      <div className="p-4 border-t border-[#0d3682]/60 space-y-3">
-        <div className="bg-[#041a45]/80 rounded-xl p-3 border border-[#0d3682]/60">
+      <div className="p-4 border-t border-[#0d2847]/80 space-y-3">
+        <div className="bg-[#081f36]/90 rounded-xl p-3 border border-[#153459]/60">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            <span className="text-[10px] text-blue-200/80 uppercase tracking-widest font-bold">
+            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-xs shadow-emerald-400" />
+            <span className="text-[10px] text-slate-300 uppercase tracking-widest font-bold">
               Status do Sistema
             </span>
           </div>
-          <p className="text-xs text-blue-100">Sistemas operacionais</p>
+          <p className="text-xs text-white font-medium">Sistemas operacionais</p>
         </div>
 
         {/* User Profile Box with large first letter avatar */}
         <div
           onClick={onOpenLogin}
-          className="flex items-center justify-between p-2.5 rounded-xl bg-[#041a45]/80 hover:bg-[#082a6e] transition-colors cursor-pointer border border-[#0d3682]/60 group"
+          className="flex items-center justify-between p-2.5 rounded-xl bg-[#081f36]/90 hover:bg-[#0c2a47] transition-colors cursor-pointer border border-[#153459]/60 group shadow-xs"
           title="Clique para trocar de usuário / login"
         >
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black text-lg flex items-center justify-center shrink-0 border border-blue-400/30 shadow-md">
+            <div className="w-9 h-9 rounded-xl bg-white text-[#011627] font-black text-lg flex items-center justify-center shrink-0 border border-white/40 shadow-sm">
               {firstLetter}
             </div>
             <div className="overflow-hidden">
-              <p className="text-xs font-bold text-white truncate group-hover:text-blue-300 transition-colors">
+              <p className="text-xs font-bold text-white truncate transition-colors">
                 {userName}
               </p>
-              <p className="text-[10px] text-blue-200/70 uppercase tracking-wider font-semibold truncate">
+              <p className="text-[10px] text-slate-300 uppercase tracking-wider font-semibold truncate">
                 {userRole}
               </p>
             </div>
           </div>
-          <span className="material-symbols-outlined text-blue-300/60 group-hover:text-white text-[18px] transition-colors shrink-0">
+          <span className="material-symbols-outlined text-slate-400 group-hover:text-white text-[18px] transition-colors shrink-0">
             swap_horiz
           </span>
         </div>
