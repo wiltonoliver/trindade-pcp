@@ -770,8 +770,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       `}</style>
 
       {/* Screen Header (Interactive) */}
-      <div className="no-print bg-slate-900 p-6 rounded-3xl text-white shadow-xl border border-slate-800 relative overflow-hidden">
-        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="no-print bg-[#06245E] p-6 rounded-3xl text-white shadow-xl border border-[#0d3682]/60 relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">

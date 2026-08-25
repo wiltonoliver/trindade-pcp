@@ -158,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`bg-slate-900 text-slate-100 h-screen w-[260px] fixed left-0 top-0 flex flex-col py-6 z-50 shadow-xl border-r border-slate-800 select-none transition-transform duration-300 ease-in-out ${
+        className={`bg-[#06245E] text-slate-100 h-screen w-[260px] fixed left-0 top-0 flex flex-col py-6 z-50 shadow-xl border-r border-[#0d3682]/60 select-none transition-transform duration-300 ease-in-out ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -169,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={onCloseMobile}
-              className="lg:hidden text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+              className="lg:hidden text-blue-300/80 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
               title="Fechar menu"
             >
               <span className="material-symbols-outlined text-2xl">close</span>
@@ -190,14 +190,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all duration-150 ease-in-out font-medium group text-left cursor-pointer ${
                   isActive
-                    ? 'bg-blue-600/10 text-blue-400 font-semibold border-l-4 border-blue-500'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border-l-4 border-transparent'
+                    ? 'bg-white/10 text-white font-semibold border-l-4 border-emerald-400 shadow-xs'
+                    : 'text-blue-100/75 hover:text-white hover:bg-white/5 border-l-4 border-transparent'
                 }`}
               >
               <div className="flex items-center gap-3">
                 <span
                   className={`material-symbols-outlined text-[20px] transition-transform duration-150 ${
-                    isActive ? 'scale-110 text-blue-400' : 'text-slate-400 group-hover:text-white'
+                    isActive ? 'scale-110 text-emerald-400' : 'text-blue-200/70 group-hover:text-white'
                   }`}
                 >
                   {item.icon}
@@ -207,8 +207,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {item.badge !== null && (
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                   item.badgeColor === 'amber'
-                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                    : 'bg-slate-800 text-slate-400 border-slate-700/60'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-[#041a45] text-blue-200 border-[#0d3682]'
                 }`}>
                   {item.badge}
                 </span>
@@ -219,21 +219,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* System Status & User Profile Footer */}
-      <div className="p-4 border-t border-slate-800 space-y-3">
-        <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-800/80">
+      <div className="p-4 border-t border-[#0d3682]/60 space-y-3">
+        <div className="bg-[#041a45]/80 rounded-xl p-3 border border-[#0d3682]/60">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+            <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+            <span className="text-[10px] text-blue-200/80 uppercase tracking-widest font-bold">
               Status do Sistema
             </span>
           </div>
-          <p className="text-xs text-slate-300">Sistemas operacionais</p>
+          <p className="text-xs text-blue-100">Sistemas operacionais</p>
         </div>
 
         {/* User Profile Box with large first letter avatar */}
         <div
           onClick={onOpenLogin}
-          className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 hover:bg-slate-800 transition-colors cursor-pointer border border-slate-800 group"
+          className="flex items-center justify-between p-2.5 rounded-xl bg-[#041a45]/80 hover:bg-[#082a6e] transition-colors cursor-pointer border border-[#0d3682]/60 group"
           title="Clique para trocar de usuário / login"
         >
           <div className="flex items-center gap-3 overflow-hidden">
@@ -241,15 +241,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {firstLetter}
             </div>
             <div className="overflow-hidden">
-              <p className="text-xs font-bold text-white truncate group-hover:text-blue-400 transition-colors">
+              <p className="text-xs font-bold text-white truncate group-hover:text-blue-300 transition-colors">
                 {userName}
               </p>
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold truncate">
+              <p className="text-[10px] text-blue-200/70 uppercase tracking-wider font-semibold truncate">
                 {userRole}
               </p>
             </div>
           </div>
-          <span className="material-symbols-outlined text-slate-500 group-hover:text-white text-[18px] transition-colors shrink-0">
+          <span className="material-symbols-outlined text-blue-300/60 group-hover:text-white text-[18px] transition-colors shrink-0">
             swap_horiz
           </span>
         </div>

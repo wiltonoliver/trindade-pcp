@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { OrderItem, ActivityLog, Store } from '@/types/factory';
+import { OrderItem, ActivityLog, Store, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
 import { INITIAL_ACTIVITY_LOGS, INITIAL_STORES } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
 import { notifyOrderReceived } from '@/lib/notificationService';
@@ -15,6 +15,7 @@ interface OrderEntryProps {
   stores?: Store[];
   onNavigateToStores?: () => void;
   defaultSelectedStore?: string;
+  currentUser?: UserProfile | null;
 }
 
 interface ExtractedOrder {
@@ -37,6 +38,7 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
   stores = INITIAL_STORES,
   onNavigateToStores,
   defaultSelectedStore,
+  currentUser,
 }) => {
   const availableStores = stores && stores.length > 0 ? stores : INITIAL_STORES;
   const activeStores = availableStores.filter((s) => s.status === 'Ativa');
@@ -427,6 +429,18 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
         : formattedDefaultDelivery;
 
       const itemImg = ext.imageUrl || (applyImageToAll && attachedImage ? attachedImage : undefined);
+      const nowStr = new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const authorName = currentUser?.name || 'Entrada de Pedidos';
+
+      const initialLog: OrderStatusHistoryLog = {
+        id: `log-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: nowStr,
+        author: authorName,
+        status: 'pendente',
+        reason: 'Pedido Recebido',
+        note: `Pedido recebido e lançado no sistema para a loja ${itemStore}. Quantidade: ${ext.quantity} ${sanitizeUnit(ext.unit)}.`,
+        actionType: 'status_update',
+      };
 
       return {
         id: `ext-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
@@ -450,6 +464,7 @@ export const OrderEntry: React.FC<OrderEntryProps> = ({
         executionStatus: 'pendente',
         imageUrl: itemImg,
         images: itemImg ? [itemImg] : undefined,
+        statusHistory: [initialLog],
       };
     });
 

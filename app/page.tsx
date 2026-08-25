@@ -815,6 +815,7 @@ export default function FactoryOpsApp() {
             stores={stores}
             onNavigateToStores={() => setActiveTab('stores')}
             defaultSelectedStore={selectedStoreForOrder}
+            currentUser={currentUser}
           />
         )}
 

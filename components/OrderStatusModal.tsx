@@ -135,23 +135,387 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   const [managerRejectionNote, setManagerRejectionNote] = useState<string>('');
   const [showRejectionInput, setShowRejectionInput] = useState<boolean>(false);
 
-  // Deduplicate history logs to remove repeating identical entries
+  // Formatted & Categorized History Actions
   const historyList = order?.statusHistory;
+
   const cleanStatusHistory = useMemo(() => {
-    if (!historyList || historyList.length === 0) return [];
+    if (!order) return [];
 
-    const uniqueLogs: OrderStatusHistoryLog[] = [];
-    const seenKeys = new Set<string>();
+    interface FormattedAction {
+      id: string;
+      type: 'pedido_recebido' | 'producao_agendada' | 'producao_concluida' | 'producao_nao_concluida' | 'producao_reagendada' | 'urgencia' | 'geral';
+      title: string;
+      badgeLabel: string;
+      badgeColorClass: string;
+      icon: string;
+      iconBgClass: string;
+      author: string;
+      timestamp: string;
+      timestampEpoch: number;
+      scheduledDate?: string;
+      previousDate?: string;
+      reason?: string;
+      note?: string;
+      cleanlinessScore?: number;
+      organizationScore?: number;
+      disciplineScore?: number;
+    }
 
-    for (const log of historyList) {
-      const key = `${log.timestamp?.trim() || ''}-${log.author?.trim() || ''}-${log.status}-${log.reason?.trim() || ''}-${log.note?.trim() || ''}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        uniqueLogs.push(log);
+    const parseEpoch = (str?: string, fallback = 0): number => {
+      if (!str) return fallback;
+      const s = str.trim();
+      if (s.includes('T') || s.match(/^\d{4}-\d{2}-\d{2}/)) {
+        const t = new Date(s).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      const brMatch = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:.*?(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+      if (brMatch) {
+        const day = parseInt(brMatch[1], 10);
+        const month = parseInt(brMatch[2], 10) - 1;
+        const year = parseInt(brMatch[3], 10);
+        const hour = brMatch[4] ? parseInt(brMatch[4], 10) : 12;
+        const min = brMatch[5] ? parseInt(brMatch[5], 10) : 0;
+        const sec = brMatch[6] ? parseInt(brMatch[6], 10) : 0;
+        const d = new Date(year, month, day, hour, min, sec);
+        if (!isNaN(d.getTime())) return d.getTime();
+      }
+      return fallback;
+    };
+
+    const formatDisplayTime = (str?: string): string => {
+      if (!str) return '';
+      const s = str.trim();
+      if (s.includes('T') || s.match(/^\d{4}-\d{2}-\d{2}/)) {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+      }
+      return s;
+    };
+
+    // Calculate baseline creation time
+    let baseCreationEpoch = 0;
+    if (order.id) {
+      const matchNum = order.id.match(/\d{10,13}/);
+      if (matchNum) {
+        baseCreationEpoch = parseInt(matchNum[0], 10);
       }
     }
-    return uniqueLogs;
-  }, [historyList]);
+    if (!baseCreationEpoch || isNaN(baseCreationEpoch) || baseCreationEpoch < 1600000000000) {
+      baseCreationEpoch = Date.now() - 86400000;
+    }
+
+    const actions: FormattedAction[] = [];
+    const seenKeys = new Set<string>();
+    const rawList = historyList || [];
+
+    for (let idx = 0; idx < rawList.length; idx++) {
+      const log = rawList[idx];
+      const rawTime = log.timestamp || '';
+      const displayTime = formatDisplayTime(rawTime) || 'Data não registrada';
+      const logEpoch = parseEpoch(rawTime, baseCreationEpoch + (idx + 1) * 60000);
+      const author = (log.author || 'Usuário').trim();
+      const reason = (log.reason || '').trim();
+      const note = (log.note || '').trim();
+      const status = log.status;
+      const actionType = log.actionType;
+
+      const dedupeKey = `${displayTime}-${author}-${status}-${reason}-${note}`;
+      if (seenKeys.has(dedupeKey)) continue;
+      seenKeys.add(dedupeKey);
+
+      // 1. Pedido recebido
+      const isReceived =
+        reason.toLowerCase().includes('pedido recebido') ||
+        note.toLowerCase().includes('pedido recebido') ||
+        reason.toLowerCase() === 'entrada de pedido';
+
+      if (isReceived) {
+        actions.push({
+          id: log.id || `rec-${idx}`,
+          type: 'pedido_recebido',
+          title: 'Pedido Recebido',
+          badgeLabel: 'Pedido Recebido',
+          badgeColorClass: 'bg-blue-50 text-blue-800 border-blue-200',
+          icon: 'inventory_2',
+          iconBgClass: 'bg-blue-100 text-blue-700',
+          author,
+          timestamp: displayTime,
+          timestampEpoch: logEpoch,
+          note: note || `Pedido recebido e cadastrado no sistema para a loja ${order.store}. Quantidade: ${order.quantity || 1} ${sanitizeUnit(order.unit)}.`,
+        });
+        continue;
+      }
+
+      // 2. Status: Produção Concluída
+      const isCompletedLog =
+        status === 'concluido' ||
+        reason.toLowerCase().includes('concluíd') ||
+        reason.toLowerCase().includes('concluid') ||
+        note.toLowerCase().includes('baixa efetuada') ||
+        note.toLowerCase().includes('baixa concluída');
+
+      if (isCompletedLog) {
+        actions.push({
+          id: log.id || `comp-${idx}`,
+          type: 'producao_concluida',
+          title: 'Status da Produção: Concluído',
+          badgeLabel: 'Produção Concluída',
+          badgeColorClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+          icon: 'check_circle',
+          iconBgClass: 'bg-emerald-100 text-emerald-700',
+          author,
+          timestamp: displayTime,
+          timestampEpoch: logEpoch,
+          cleanlinessScore: log.cleanlinessScore,
+          organizationScore: log.organizationScore,
+          disciplineScore: log.disciplineScore,
+          note: note && !note.toLowerCase().includes('baixa efetuada') && !note.toLowerCase().includes('concluid') ? note : undefined,
+        });
+        continue;
+      }
+
+      // 3. Status: Retornado para Aguardando Data
+      const isReturnPending =
+        actionType === 'return_to_pending' ||
+        status === 'retornado_aguardando' ||
+        reason.toLowerCase().includes('aguardando data') ||
+        note.toLowerCase().includes('aguardando data');
+
+      if (isReturnPending) {
+        const notCompReason = reason && !reason.toLowerCase().includes('aguardando data') && !reason.toLowerCase().includes('retornado') ? reason : '';
+        actions.push({
+          id: log.id || `ret-${idx}`,
+          type: 'producao_reagendada',
+          title: 'Status da Produção: Retornado para Aguardando Data',
+          badgeLabel: 'Retornado p/ Aguardando Data',
+          badgeColorClass: 'bg-amber-50 text-amber-800 border-amber-200',
+          icon: 'pending_actions',
+          iconBgClass: 'bg-amber-100 text-amber-700',
+          author,
+          timestamp: displayTime,
+          timestampEpoch: logEpoch,
+          previousDate: log.previousDate && log.previousDate !== 'Aguardando Data' ? log.previousDate : undefined,
+          reason: notCompReason || undefined,
+          note: note || undefined,
+        });
+        continue;
+      }
+
+      // 4. Status: Produção Agendada ou Reagendada
+      const isReschedule =
+        actionType === 'reschedule' ||
+        reason.toLowerCase().includes('agendad') ||
+        note.toLowerCase().includes('agendad') ||
+        note.toLowerCase().includes('reagendad');
+
+      if (isReschedule) {
+        let targetDate = '';
+        const matchNoteDate = note.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+        if (matchNoteDate) {
+          targetDate = matchNoteDate[1];
+        } else if (order.productionDate && order.productionDate !== 'Aguardando Data') {
+          targetDate = order.productionDate;
+        }
+
+        const isReagendamento = (log.previousDate && log.previousDate !== 'Aguardando Data') || note.toLowerCase().includes('reagendad');
+
+        if (isReagendamento) {
+          actions.push({
+            id: log.id || `resched-${idx}`,
+            type: 'producao_reagendada',
+            title: targetDate ? `Status da Produção: Reagendado para ${targetDate}` : 'Status da Produção: Reagendado',
+            badgeLabel: 'Produção Reagendada',
+            badgeColorClass: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+            icon: 'event_repeat',
+            iconBgClass: 'bg-indigo-100 text-indigo-700',
+            author,
+            timestamp: displayTime,
+            timestampEpoch: logEpoch,
+            scheduledDate: targetDate || undefined,
+            previousDate: log.previousDate && log.previousDate !== 'Aguardando Data' ? log.previousDate : undefined,
+            reason: reason && !reason.toLowerCase().includes('agendad') ? reason : undefined,
+            note: note || undefined,
+          });
+        } else {
+          actions.push({
+            id: log.id || `sched-${idx}`,
+            type: 'producao_agendada',
+            title: targetDate ? `Produção Agendada para dia ${targetDate}` : `Produção Agendada`,
+            badgeLabel: 'Produção Agendada',
+            badgeColorClass: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+            icon: 'event_available',
+            iconBgClass: 'bg-indigo-100 text-indigo-700',
+            author,
+            timestamp: displayTime,
+            timestampEpoch: logEpoch,
+            scheduledDate: targetDate || undefined,
+            note: note && !note.toLowerCase().includes('agendado para') ? note : undefined,
+          });
+        }
+        continue;
+      }
+
+      // 5. Status: Produção Não Concluída (com Motivo da não conclusão)
+      const isNotCompleted =
+        status === 'nao_produzido' ||
+        status === 'parcial' ||
+        (reason && !reason.includes('Urgência') && !reason.includes('Cadastro') && !reason.includes('Imagem'));
+
+      if (isNotCompleted) {
+        const notCompletedReason = reason || order.delayReason || order.pendingReason || 'Sem motivo informado';
+        actions.push({
+          id: log.id || `notcomp-${idx}`,
+          type: 'producao_nao_concluida',
+          title: 'Status da Produção: Não Concluído',
+          badgeLabel: 'Não Concluído',
+          badgeColorClass: 'bg-rose-50 text-rose-800 border-rose-200',
+          icon: 'warning',
+          iconBgClass: 'bg-rose-100 text-rose-700',
+          author,
+          timestamp: displayTime,
+          timestampEpoch: logEpoch,
+          reason: notCompletedReason,
+          cleanlinessScore: log.cleanlinessScore,
+          organizationScore: log.organizationScore,
+          disciplineScore: log.disciplineScore,
+          note: note && note !== notCompletedReason ? note : undefined,
+        });
+        continue;
+      }
+
+      // 6. Urgência
+      if (reason.includes('Urgência') || reason.includes('urgência')) {
+        const isRecusada = reason.includes('Recusada');
+        const isAprovada = reason.includes('Aprovada') || reason.includes('Aceita');
+        actions.push({
+          id: log.id || `urg-${idx}`,
+          type: 'urgencia',
+          title: isRecusada ? 'Urgência Recusada pela Gestão' : isAprovada ? 'Urgência Aprovada pela Gestão' : 'Solicitação de Urgência',
+          badgeLabel: isRecusada ? 'Urgência Recusada' : isAprovada ? 'Urgência Aprovada' : 'Solicitação de Urgência',
+          badgeColorClass: isRecusada ? 'bg-slate-100 text-slate-700 border-slate-200' : isAprovada ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200',
+          icon: isRecusada ? 'info' : isAprovada ? 'verified' : 'bolt',
+          iconBgClass: isRecusada ? 'bg-slate-200 text-slate-700' : isAprovada ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700',
+          author,
+          timestamp: displayTime,
+          timestampEpoch: logEpoch,
+          note: note || undefined,
+        });
+        continue;
+      }
+
+      // 7. Geral / Alteração de cadastro
+      actions.push({
+        id: log.id || `gen-${idx}`,
+        type: 'geral',
+        title: reason || 'Atualização de Cadastro',
+        badgeLabel: 'Atualização',
+        badgeColorClass: 'bg-slate-100 text-slate-700 border-slate-200',
+        icon: 'edit_note',
+        iconBgClass: 'bg-slate-200 text-slate-700',
+        author,
+        timestamp: displayTime,
+        timestampEpoch: logEpoch,
+        reason: reason || undefined,
+        note: note || undefined,
+      });
+    }
+
+    // Synthesize guaranteed "Pedido Recebido" if not present in logs
+    const hasReceived = actions.some((a) => a.type === 'pedido_recebido');
+    if (!hasReceived) {
+      const creationDate = new Date(baseCreationEpoch);
+      const formattedReceivedDate = `${creationDate.toLocaleDateString('pt-BR')} às ${creationDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      actions.push({
+        id: `auto-received-${order.id}`,
+        type: 'pedido_recebido',
+        title: 'Pedido Recebido',
+        badgeLabel: 'Pedido Recebido',
+        badgeColorClass: 'bg-blue-50 text-blue-800 border-blue-200',
+        icon: 'inventory_2',
+        iconBgClass: 'bg-blue-100 text-blue-700',
+        author: 'Setor de Entrada / PCP',
+        timestamp: formattedReceivedDate,
+        timestampEpoch: baseCreationEpoch,
+        note: `Pedido recebido e cadastrado no sistema para a loja ${order.store}. Quantidade: ${order.quantity || 1} ${sanitizeUnit(order.unit)}.`,
+      });
+    }
+
+    // Synthesize "Produção Agendada" if scheduled date exists and not logged
+    const hasScheduling = actions.some((a) => a.type === 'producao_agendada' || a.type === 'producao_reagendada');
+    if (!hasScheduling && order.productionDate && order.productionDate !== 'Aguardando Data') {
+      const scheduleEpoch = baseCreationEpoch + 600000;
+      const scheduleDate = new Date(scheduleEpoch);
+      const formattedSchedDate = `${scheduleDate.toLocaleDateString('pt-BR')} às ${scheduleDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      actions.push({
+        id: `auto-scheduled-${order.id}`,
+        type: 'producao_agendada',
+        title: `Produção Agendada para dia ${order.productionDate}`,
+        badgeLabel: 'Produção Agendada',
+        badgeColorClass: 'bg-indigo-50 text-indigo-800 border-indigo-200',
+        icon: 'event_available',
+        iconBgClass: 'bg-indigo-100 text-indigo-700',
+        author: 'Planejamento / PCP',
+        timestamp: formattedSchedDate,
+        timestampEpoch: scheduleEpoch,
+        scheduledDate: order.productionDate,
+        note: `Programado para a esteira de montagem em ${order.productionDate}.`,
+      });
+    }
+
+    // Synthesize "Produção Concluída" if status is completed and not logged
+    const hasCompleted = actions.some((a) => a.type === 'producao_concluida');
+    if (!hasCompleted && (order.executionStatus === 'concluido' || order.progress === 100)) {
+      const completedEpoch = Date.now();
+      const compDate = new Date(completedEpoch);
+      const formattedCompDate = `${compDate.toLocaleDateString('pt-BR')} às ${compDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      actions.push({
+        id: `auto-completed-${order.id}`,
+        type: 'producao_concluida',
+        title: 'Status da Produção: Concluído',
+        badgeLabel: 'Produção Concluída',
+        badgeColorClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        icon: 'check_circle',
+        iconBgClass: 'bg-emerald-100 text-emerald-700',
+        author: 'Gestão de Produção',
+        timestamp: formattedCompDate,
+        timestampEpoch: completedEpoch,
+        cleanlinessScore: order.cleanlinessScore,
+        organizationScore: order.organizationScore,
+        disciplineScore: order.disciplineScore,
+      });
+    }
+
+    // Synthesize "Produção Não Concluída" if status is not produced and has reason and not logged
+    const hasNotCompleted = actions.some((a) => a.type === 'producao_nao_concluida');
+    if (!hasNotCompleted && order.executionStatus === 'nao_produzido' && (order.delayReason || order.pendingReason)) {
+      const notCompEpoch = Date.now() - 3600000;
+      const notCompDate = new Date(notCompEpoch);
+      const formattedNotCompDate = `${notCompDate.toLocaleDateString('pt-BR')} às ${notCompDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+      actions.push({
+        id: `auto-notcomp-${order.id}`,
+        type: 'producao_nao_concluida',
+        title: 'Status da Produção: Não Concluído',
+        badgeLabel: 'Não Concluído',
+        badgeColorClass: 'bg-rose-50 text-rose-800 border-rose-200',
+        icon: 'warning',
+        iconBgClass: 'bg-rose-100 text-rose-700',
+        author: 'Gestão de Produção',
+        timestamp: formattedNotCompDate,
+        timestampEpoch: notCompEpoch,
+        reason: order.delayReason || order.pendingReason || 'Sem motivo informado',
+        cleanlinessScore: order.cleanlinessScore,
+        organizationScore: order.organizationScore,
+        disciplineScore: order.disciplineScore,
+      });
+    }
+
+    // Sort descending by timestamp: Most recent action is at index 0 (top of the list)
+    actions.sort((a, b) => b.timestampEpoch - a.timestampEpoch);
+
+    return actions;
+  }, [order, historyList]);
 
   if (!isOpen || !order) return null;
 
@@ -1072,119 +1436,132 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
           {/* History Timeline of previous motives & status changes */}
           <div className="space-y-3 pt-2">
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-blue-600">history</span>
-              <span>Histórico de Relatos e Motivos Gravados ({cleanStatusHistory.length})</span>
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[16px] text-blue-600">history</span>
+                <span>Histórico de Relatos e Ações Gravadas ({cleanStatusHistory.length})</span>
+              </h4>
+              <span className="text-[10px] font-semibold text-slate-500">
+                Mais recente no topo
+              </span>
+            </div>
 
             {cleanStatusHistory.length === 0 ? (
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center text-xs text-slate-500">
                 Nenhuma ocorrência ou alteração registrada anteriormente para este pedido.
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                 {cleanStatusHistory.map((log, idx) => {
-                  const statusLabel =
-                    log.status === 'concluido'
-                      ? 'Concluído'
-                      : log.status === 'retornado_aguardando'
-                      ? 'Retornado p/ Aguardando Data'
-                      : log.status === 'nao_produzido'
-                      ? 'Com Problema / Não Concluído'
-                      : log.status === 'em_andamento'
-                      ? 'Em Andamento'
-                      : 'Não Iniciado';
-
-                  const reasonText = (log.reason || '').trim();
-                  const noteText = (log.note || '').trim();
-
-                  // Avoid repeating reason if it matches default texts or status label or is duplicated in note
-                  const isRedundantReason =
-                    !reasonText ||
-                    reasonText === 'Sem motivo especificado' ||
-                    reasonText.toLowerCase() === statusLabel.toLowerCase() ||
-                    reasonText.toLowerCase() === 'concluído' ||
-                    reasonText.toLowerCase() === 'concluido' ||
-                    reasonText === noteText;
+                  const isTopMost = idx === 0;
 
                   return (
-                    <div key={log.id ? `${log.id}-${idx}` : `log-${idx}`} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
-                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                        <span className="flex items-center gap-1 text-slate-700">
-                          <span className="material-symbols-outlined text-[14px] text-blue-600">person</span>
-                          {log.author}
+                    <div
+                      key={log.id ? `${log.id}-${idx}` : `action-${idx}`}
+                      className={`p-3.5 rounded-xl border text-xs space-y-2 transition-all ${
+                        isTopMost
+                          ? 'bg-blue-50/40 border-blue-200 shadow-sm'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      {/* Top Header Row: Action Badge + Most Recent Tag + Date/Time */}
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 border ${log.badgeColorClass}`}
+                          >
+                            <span className="material-symbols-outlined text-[13px]">
+                              {log.icon}
+                            </span>
+                            {log.badgeLabel}
+                          </span>
+
+                          {isTopMost && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-blue-600 text-white flex items-center gap-0.5 uppercase tracking-wide">
+                              <span className="material-symbols-outlined text-[10px]">check</span>
+                              Mais Recente
+                            </span>
+                          )}
+                        </div>
+
+                        <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px] text-slate-400">schedule</span>
+                          {log.timestamp}
                         </span>
-                        <span>{log.timestamp}</span>
                       </div>
 
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {log.reason?.includes('Urgência') || log.reason?.includes('urgência') ? (
-                          log.reason.includes('Recusada') ? (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px] text-slate-400">info</span>
-                              Urgência Recusada
-                            </span>
-                          ) : log.reason.includes('Aprovada') || log.reason.includes('Aceita') ? (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px] text-emerald-600">verified</span>
-                              Urgência Aprovada
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px] text-amber-600">bolt</span>
-                              Solicitação de Urgência
-                            </span>
-                          )
-                        ) : (
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 border ${
-                            log.status === 'concluido'
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : log.status === 'nao_produzido'
-                              ? 'bg-slate-100 text-slate-700 border-slate-200'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
-                          }`}>
-                            <span className="material-symbols-outlined text-[12px]">
-                              {log.status === 'concluido' ? 'check_circle' : 'info'}
-                            </span>
-                            {statusLabel}
-                          </span>
-                        )}
-                        {log.previousDate && log.previousDate !== 'Aguardando Data' && (
-                          <span className="text-[10px] text-slate-500 font-medium">
-                            (Data anterior: {log.previousDate})
-                          </span>
-                        )}
+                      {/* Title & Author */}
+                      <div className="flex items-center justify-between text-xs gap-2">
+                        <span className="font-bold text-slate-900">{log.title}</span>
+                        <span className="text-[11px] font-medium text-slate-600 flex items-center gap-1 shrink-0">
+                          <span className="material-symbols-outlined text-[13px] text-slate-400">person</span>
+                          Lançado por: <strong className="text-slate-800 font-semibold">{log.author}</strong>
+                        </span>
                       </div>
 
-                      {!isRedundantReason && !reasonText.includes('Urgência') && (
-                        <div className="font-bold text-amber-900 bg-amber-50 px-2 py-1 rounded-md border border-amber-200/70 text-[11px]">
-                          Motivo: {reasonText}
+                      {/* Motivo da Não Conclusão (Destacado para Não Concluído) */}
+                      {log.type === 'producao_nao_concluida' && log.reason && (
+                        <div className="p-2.5 bg-rose-50 rounded-lg border border-rose-200 text-rose-900 space-y-1">
+                          <div className="font-bold text-[11px] flex items-center gap-1 text-rose-800">
+                            <span className="material-symbols-outlined text-[14px]">report_problem</span>
+                            Motivo da Não Conclusão:
+                          </div>
+                          <p className="font-semibold text-xs text-rose-950 pl-5">
+                            {log.reason}
+                          </p>
                         </div>
                       )}
 
+                      {/* Detalhes de Reagendamento / Aguardando Data */}
+                      {log.type === 'producao_reagendada' && (
+                        <div className="p-2 bg-amber-50/80 rounded-lg border border-amber-200/80 text-amber-900 text-[11px] space-y-1">
+                          {log.scheduledDate && (
+                            <div className="font-semibold flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px] text-amber-700">event</span>
+                              <span>Nova Data de Produção: <strong>{log.scheduledDate}</strong></span>
+                            </div>
+                          )}
+                          {log.previousDate && (
+                            <div className="text-amber-800 text-[10px]">
+                              Data anterior: <strong>{log.previousDate}</strong>
+                            </div>
+                          )}
+                          {log.reason && log.reason !== 'Sem motivo informado' && (
+                            <div className="text-[11px] font-medium text-amber-900 pt-0.5">
+                              Motivo: <strong>{log.reason}</strong>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 5S Evaluations if applicable */}
                       {(log.cleanlinessScore || log.organizationScore || log.disciplineScore) && (
                         <div className="flex flex-wrap gap-2 pt-0.5 text-[10px] font-bold text-slate-600">
                           {log.cleanlinessScore && (
-                            <span className="bg-cyan-50 text-cyan-800 px-1.5 py-0.5 rounded border border-cyan-200">
-                              Limpeza: {log.cleanlinessScore}/5 ★
+                            <span className="bg-cyan-50 text-cyan-800 px-2 py-0.5 rounded border border-cyan-200 flex items-center gap-1">
+                              <span>Limpeza:</span>
+                              <span className="text-cyan-900 font-extrabold">{log.cleanlinessScore}/5 ★</span>
                             </span>
                           )}
                           {log.organizationScore && (
-                            <span className="bg-indigo-50 text-indigo-800 px-1.5 py-0.5 rounded border border-indigo-200">
-                              Organização: {log.organizationScore}/5 ★
+                            <span className="bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-200 flex items-center gap-1">
+                              <span>Organização:</span>
+                              <span className="text-indigo-900 font-extrabold">{log.organizationScore}/5 ★</span>
                             </span>
                           )}
                           {log.disciplineScore && (
-                            <span className="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
-                              Disciplina: {log.disciplineScore}/5 ★
+                            <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                              <span>Disciplina:</span>
+                              <span className="text-emerald-900 font-extrabold">{log.disciplineScore}/5 ★</span>
                             </span>
                           )}
                         </div>
                       )}
 
-                      {noteText && (
-                        <p className="text-slate-600 text-[11px] bg-white p-2 rounded-lg border border-slate-200 italic">
-                          &quot;{noteText}&quot;
+                      {/* Observações e relatos */}
+                      {log.note && (
+                        <p className="text-slate-700 text-[11px] bg-white p-2 rounded-lg border border-slate-200 italic leading-relaxed">
+                          &quot;{log.note}&quot;
                         </p>
                       )}
                     </div>
