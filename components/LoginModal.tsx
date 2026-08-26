@@ -1133,7 +1133,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       {/* Footer Branding Bar */}
       <footer className="border-t border-slate-200/80 bg-white/80 px-6 py-3 text-center text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
-        <p>© 2026 Trindade Esquadrias. Sistema de Gestão Industrial e PCP Integrado.</p>
+        <p>© 2026 PCP-Trindade Esquadrias.</p>
         <div className="flex items-center gap-3">
           <p className="text-[11px] font-semibold text-slate-600">
             Versão 3.5 • Produção em Tempo Real
