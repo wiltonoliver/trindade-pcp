@@ -49,9 +49,13 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 
   // Helper to populate fields from OrderItem
   const populateFromOrder = useCallback((ord: OrderItem) => {
-    setOpNumber(ord.orderId || ord.id);
-    setClientName(ord.store || 'Loja Principal');
-    setItemDesc(ord.itemDescription || '');
+    const op = ord.orderId || ord.id || '';
+    const store = ord.store || 'Loja Principal';
+    const desc = ord.itemDescription || '';
+
+    setOpNumber(op);
+    setClientName(store);
+    setItemDesc(desc);
     setQuantity(ord.quantity || 1);
     setCopiesCount(ord.quantity || 1);
     setIsVolumeSequential((ord.quantity || 1) > 1);
@@ -61,10 +65,13 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
     setPriorityText(ord.priority || 'NORMAL');
     
     // Generate clean lot code: LOT-[DATE]-[OP]
-    const cleanOp = (ord.orderId || ord.id).replace(/[^a-zA-Z0-9]/g, '');
+    const cleanOp = op.replace(/[^a-zA-Z0-9]/g, '');
     const todayStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
     setLotCode(`LOT-${todayStr}-${cleanOp.slice(-4)}`);
-    setBarcodeValue(ord.orderId || ord.id);
+    
+    // Full barcode data: OP - Loja - Descrição da peça
+    const fullBarcode = [op, store, desc].filter(Boolean).join(' - ');
+    setBarcodeValue(fullBarcode);
     setObservations(ord.pendingReason ? `Obs: ${ord.pendingReason}` : '');
   }, []);
 
@@ -242,7 +249,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
       const cleanStore = (clientName || '').trim().toUpperCase();
       const combinedOpStore = (cleanOpNum || cleanStore) ? `${cleanOpNum}${cleanStore}` : 'BC3026';
       const operatorDisplayName = (operatorName || 'CLEITON').trim().toUpperCase();
-      const barcodeText = barcodeValue || (opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA');
+      const barcodeText = barcodeValue || [cleanOpNum, cleanStore, itemDesc].filter(Boolean).join(' - ') || (opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA');
 
       return (
         <div 
@@ -386,11 +393,11 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
               <div>OP: <strong>{operatorName || 'PCP'}</strong></div>
             </div>
             <div style={{ width: '32mm', minWidth: '32mm' }}>
-              {renderBarcodeSVG(barcodeValue || opNumber || 'ZEBRA', { 
+              {renderBarcodeSVG(barcodeValue || [opNumber, clientName, itemDesc].filter(Boolean).join(' - ') || 'ZEBRA', { 
                 height: 48, 
                 className: 'h-11 w-full max-w-[240px]', 
                 svgStyle: { height: '11mm', width: '30mm', maxHeight: '100%', maxWidth: '100%' },
-                textClass: 'text-[11px] font-mono font-black' 
+                textClass: 'text-[9.5px] font-mono font-black' 
               })}
             </div>
           </div>
@@ -455,11 +462,11 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
           </div>
 
           <div className="border-t-4 border-black pt-3 flex flex-col items-center" style={{ borderTop: '4px solid black', paddingTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            {renderBarcodeSVG(barcodeValue || opNumber || 'ZEBRA100', { 
+            {renderBarcodeSVG(barcodeValue || [opNumber, clientName, itemDesc].filter(Boolean).join(' - ') || 'ZEBRA100', { 
               height: 60, 
               className: 'h-16 w-full max-w-[280px]', 
               svgStyle: { height: '16mm', width: '70mm', maxHeight: '100%', maxWidth: '100%' },
-              textClass: 'text-[13px] font-mono font-black mt-1' 
+              textClass: 'text-[11px] font-mono font-black mt-1' 
             })}
             <span className="text-[10px] font-mono mt-1 font-black" style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 900, marginTop: '4px' }}>SISTEMA TRINDADE PCP - IMPRESSÃO ZEBRA ZD220</span>
           </div>
@@ -697,12 +704,12 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Valor do Código de Barras:</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Conteúdo do Código de Barras (OP - Loja - Descrição):</label>
                 <input
                   type="text"
                   value={barcodeValue}
                   onChange={(e) => setBarcodeValue(e.target.value)}
-                  placeholder="Ex: OP-1045"
+                  placeholder="Ex: OP-1045 - Loja Flamboyant - Vitrô 4F"
                   className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
                 />
               </div>

@@ -230,7 +230,7 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
       const cleanStore = (ord.store || '').trim().toUpperCase();
       const combinedOpStore = (cleanOpNum || cleanStore) ? `${cleanOpNum}${cleanStore}` : 'BC3026';
       const operatorDisplayName = (ord.assignedOperatorName || 'CLEITON').trim().toUpperCase();
-      const barcodeText = opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA';
+      const barcodeText = [cleanOpNum, cleanStore, ord.itemDescription].filter(Boolean).join(' - ') || (opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA');
 
       return (
         <div 
@@ -369,11 +369,11 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
               {volText && <span className="ml-2 bg-black text-white px-1 font-black" style={{ marginLeft: '8px', backgroundColor: 'black', color: 'white', padding: '0 4px', fontWeight: 900 }}>{volText}</span>}
             </div>
             <div className="w-[32mm]" style={{ width: '32mm', minWidth: '32mm', maxWidth: '32mm' }}>
-              {renderBarcodeSVG(opNumber, { 
+              {renderBarcodeSVG([opNumber, ord.store, ord.itemDescription].filter(Boolean).join(' - '), { 
                 height: 35, 
                 className: 'h-8 w-[30mm]', 
                 svgStyle: { height: '10mm', width: '30mm', maxHeight: '100%', maxWidth: '100%' },
-                textClass: 'text-[9px] font-mono font-black' 
+                textClass: 'text-[8.5px] font-mono font-black' 
               })}
             </div>
           </div>
@@ -422,11 +422,11 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
         </div>
 
         <div className="border-t-4 border-black pt-2 flex flex-col items-center" style={{ borderTop: '4px solid black', paddingTop: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {renderBarcodeSVG(opNumber, { 
+          {renderBarcodeSVG([opNumber, ord.store, ord.itemDescription].filter(Boolean).join(' - '), { 
             height: 60, 
             className: 'h-16 w-[70mm]', 
             svgStyle: { height: '16mm', width: '70mm', maxHeight: '100%', maxWidth: '100%' },
-            textClass: 'text-[12px] font-mono font-black' 
+            textClass: 'text-[11px] font-mono font-black' 
           })}
           <div className="flex justify-between w-full mt-2 text-[10px] font-black" style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '8px', fontSize: '10px', fontWeight: 900 }}>
             <span>{lotCode}</span>

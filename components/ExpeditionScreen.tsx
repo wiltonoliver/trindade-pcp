@@ -124,26 +124,38 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     if (!codeRaw || !codeRaw.trim()) return null;
     const clean = codeRaw.trim().toUpperCase().replace(/#/g, '');
 
+    // Extract potential OP from segmented barcodes (e.g. "31458 - LOJA FLAMBOYANT - VITRO 4F" -> "31458")
+    const segments = clean.split(/[\-\|\/]/).map((s) => s.trim()).filter(Boolean);
+    const possibleOpFromSegment = segments[0] || '';
+
     // 1. Direct ID / OP Number match
     let matched = orders.find((o) => {
       const opNum = (o.orderId || o.id || '').replace(/#/g, '').trim().toUpperCase();
-      return opNum === clean;
+      return (
+        opNum === clean ||
+        (possibleOpFromSegment && opNum === possibleOpFromSegment) ||
+        (clean.startsWith('OP-') && opNum === clean.replace('OP-', '').trim()) ||
+        (clean.startsWith('OP ') && opNum === clean.replace('OP ', '').trim())
+      );
     });
     if (matched) return matched;
 
-    // 2. Barcode text match (e.g., 31458RAGUEB or 31458-PORTA or BC3026-PORTA)
+    // 2. Barcode text match (e.g., 31458RAGUEB, 31458 - LOJA, 31458-PORTA or BC3026-PORTA)
     matched = orders.find((o) => {
       const opNum = (o.orderId || o.id || '').replace(/#/g, '').trim().toUpperCase();
       const storeName = (o.store || '').trim().toUpperCase();
+      const desc = (o.itemDescription || '').trim().toUpperCase();
       const combined = `${opNum}${storeName}`;
       const barcode1 = `${opNum}-PORTA`;
       const barcode2 = `BC3026-PORTA`;
+      const fullBarcode = `${opNum} - ${storeName} - ${desc}`;
 
       return (
         clean === combined ||
         clean === barcode1 ||
         clean === barcode2 ||
-        clean.startsWith(opNum) ||
+        clean === fullBarcode ||
+        (opNum && clean.includes(opNum)) ||
         (clean.length >= 4 && combined.startsWith(clean))
       );
     });
@@ -151,7 +163,7 @@ export const ExpeditionScreen: React.FC<ExpeditionScreenProps> = ({
     if (matched) return matched;
 
     // 3. Match item description or assigned operator
-    matched = orders.find((o) => o.itemDescription.toUpperCase().includes(clean));
+    matched = orders.find((o) => o.itemDescription.toUpperCase().includes(clean) || (o.store && clean.includes(o.store.toUpperCase())));
 
     return matched || null;
   }, [orders]);

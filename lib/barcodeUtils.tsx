@@ -8,12 +8,15 @@ export const renderBarcodeSVG = (
     className?: string; 
     textClass?: string;
     svgStyle?: React.CSSProperties;
+    hideText?: boolean;
+    displaySubtitle?: string;
   }
 ) => {
   const str = text || 'OP-1001';
   const svgHeight = options?.height || 45;
   const svgClass = options?.className || 'h-11 w-full max-w-[230px]';
   const txtClass = options?.textClass || 'text-[11px] font-mono tracking-widest text-black font-black mt-0.5 uppercase';
+  const displayText = options?.displaySubtitle !== undefined ? options.displaySubtitle : str;
 
   // Generate deterministic bar widths based on ASCII char codes
   const bars: { width: number; isBlack: boolean }[] = [];
@@ -73,7 +76,22 @@ export const renderBarcodeSVG = (
         <rect width="100%" height="100%" fill="#ffffff" />
         {elements}
       </svg>
-      <span className={txtClass} style={{ display: 'block', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{str}</span>
+      {!options?.hideText && (
+        <span 
+          className={txtClass} 
+          style={{ 
+            display: 'block', 
+            textAlign: 'center', 
+            whiteSpace: 'nowrap', 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis', 
+            maxWidth: '100%' 
+          }}
+          title={displayText}
+        >
+          {displayText}
+        </span>
+      )}
     </div>
   );
 };
