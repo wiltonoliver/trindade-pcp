@@ -1161,7 +1161,6 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   required
                   value={newOrderId}
                   onChange={(e) => setNewOrderId(e.target.value)}
-                  placeholder="Ex: #ORD-9950"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1175,7 +1174,6 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   required
                   value={newStore}
                   onChange={(e) => setNewStore(e.target.value)}
-                  placeholder="Ex: Loja E - Flamboyant"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
                 <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200/80 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors select-none">
@@ -1207,7 +1205,6 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   required
                   value={newItemDesc}
                   onChange={(e) => setNewItemDesc(e.target.value)}
-                  placeholder="Ex: 50x Camisas Polo"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1223,7 +1220,6 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                     min={1}
                     value={newQty}
                     onChange={(e) => setNewQty(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="Ex: 30"
                     className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

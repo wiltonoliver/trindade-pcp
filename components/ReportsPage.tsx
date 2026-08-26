@@ -1118,14 +1118,30 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   <table className="w-full text-left border-collapse text-xs">
                     <tbody className="divide-y divide-slate-400 font-sans">
                       {group.orders.map((ord, idx) => {
-                        const storePrefix = ord.store?.trim() ? `(${ord.store.trim()}) ` : '';
+                        const storeName = ord.store?.trim() || '';
+                        const orderId = ord.orderId?.trim() || '';
+
+                        let storeAndOpPrefix = '';
+                        if (storeName && orderId) {
+                          const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
+                          storeAndOpPrefix = `(${storeName} - ${opLabel}) `;
+                        } else if (storeName) {
+                          storeAndOpPrefix = `(${storeName}) `;
+                        } else if (orderId) {
+                          const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
+                          storeAndOpPrefix = `(${opLabel}) `;
+                        }
+
                         const qty = ord.quantity || 1;
                         const qtyPrefix = `${qty}x `;
                         
                         let cleanDesc = (ord.itemDescription || '').trim();
-                        // Remove duplicated store in parenthesis if already at beginning of description
-                        if (ord.store && cleanDesc.toLowerCase().startsWith(`(${ord.store.trim().toLowerCase()})`)) {
-                          cleanDesc = cleanDesc.slice(ord.store.trim().length + 2).trim();
+                        // Remove duplicated store or OP in parenthesis if already at beginning of description
+                        if (storeName && cleanDesc.toLowerCase().startsWith(`(${storeName.toLowerCase()}`)) {
+                          const closingParen = cleanDesc.indexOf(')');
+                          if (closingParen !== -1) {
+                            cleanDesc = cleanDesc.slice(closingParen + 1).trim();
+                          }
                         }
                         // Remove any existing/repeated quantity prefixes at the beginning like "1x ", "1X ", "2 x ", "1 - ", etc.
                         cleanDesc = cleanDesc.replace(/^(\d+\s*[xX\-]\s*)+/, '').trim();
@@ -1133,7 +1149,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                         return (
                           <tr key={ord.id || idx}>
                             <td className="p-2 pl-3 font-bold text-slate-900 text-xs">
-                              {storePrefix && <span className="font-black text-slate-900">{storePrefix}</span>}
+                              {storeAndOpPrefix && <span className="font-black text-slate-900">{storeAndOpPrefix}</span>}
                               <span className="font-extrabold text-slate-900">{qtyPrefix}</span>
                               <span>{cleanDesc}</span>
                             </td>
@@ -1232,14 +1248,30 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                     <table className="w-full text-left border-collapse text-xs font-sans">
                       <tbody className="divide-y divide-slate-400">
                         {group.orders.map((ord, idx) => {
-                          const storePrefix = ord.store?.trim() ? `(${ord.store.trim()}) ` : '';
+                          const storeName = ord.store?.trim() || '';
+                          const orderId = ord.orderId?.trim() || '';
+
+                          let storeAndOpPrefix = '';
+                          if (storeName && orderId) {
+                            const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
+                            storeAndOpPrefix = `(${storeName} - ${opLabel}) `;
+                          } else if (storeName) {
+                            storeAndOpPrefix = `(${storeName}) `;
+                          } else if (orderId) {
+                            const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
+                            storeAndOpPrefix = `(${opLabel}) `;
+                          }
+
                           const qty = ord.quantity || 1;
                           const qtyPrefix = `${qty}x `;
                           
                           let cleanDesc = (ord.itemDescription || '').trim();
-                          // Remove duplicated store in parenthesis if already at beginning of description
-                          if (ord.store && cleanDesc.toLowerCase().startsWith(`(${ord.store.trim().toLowerCase()})`)) {
-                            cleanDesc = cleanDesc.slice(ord.store.trim().length + 2).trim();
+                          // Remove duplicated store or OP in parenthesis if already at beginning of description
+                          if (storeName && cleanDesc.toLowerCase().startsWith(`(${storeName.toLowerCase()}`)) {
+                            const closingParen = cleanDesc.indexOf(')');
+                            if (closingParen !== -1) {
+                              cleanDesc = cleanDesc.slice(closingParen + 1).trim();
+                            }
                           }
                           // Remove any existing/repeated quantity prefixes at the beginning like "1x ", "1X ", "2 x ", "1 - ", etc.
                           cleanDesc = cleanDesc.replace(/^(\d+\s*[xX\-]\s*)+/, '').trim();
@@ -1247,7 +1279,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                           return (
                             <tr key={ord.id || idx}>
                               <td className="p-2 pl-3 font-bold text-slate-900">
-                                {storePrefix && <span className="font-black text-slate-900">{storePrefix}</span>}
+                                {storeAndOpPrefix && <span className="font-black text-slate-900">{storeAndOpPrefix}</span>}
                                 <span className="font-extrabold text-slate-900">{qtyPrefix}</span>
                                 <span>{cleanDesc}</span>
                               </td>
