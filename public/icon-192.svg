@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#011627" />
+      <stop offset="100%" stop-color="#0b2c4d" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="40" fill="url(#bgGrad)" />
+  <!-- Factory / Precision Frame Icon -->
+  <rect x="24" y="24" width="144" height="144" rx="20" fill="none" stroke="url(#accentGrad)" stroke-width="6" opacity="0.6" />
+  <!-- Center 'T' Emblem -->
+  <path d="M46 54 C46 47.4 51.4 42 58 42 H134 C140.6 42 146 47.4 146 54 V70 C146 73.3 143.3 76 140 76 H112 V138 C112 144.6 106.6 150 100 150 H92 C85.4 150 80 144.6 80 138 V76 H52 C48.7 76 46 73.3 46 70 Z" fill="#ffffff" />
+  <circle cx="96" cy="59" r="6" fill="#38bdf8" />
+</svg>

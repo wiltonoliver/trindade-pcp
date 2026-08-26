@@ -196,6 +196,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [newEmail, setNewEmail] = useState('');
   const [newPlant, setNewPlant] = useState('Planta A - Matriz');
 
+  // PWA Install Prompt State
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [isIOSDevice, setIsIOSDevice] = useState(false);
+  const [showIOSModal, setShowIOSModal] = useState(false);
+  const [installSuccessToast, setInstallSuccessToast] = useState(false);
+
   const loadSavedUsers = () => {
     if (typeof window !== 'undefined') {
       const deletedIdsStr = localStorage.getItem('trindade_deleted_user_ids');
@@ -220,27 +227,87 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   React.useEffect(() => {
     queueMicrotask(() => loadSavedUsers());
 
-    const unsub = subscribeUsers((firestoreUsers) => {
-      const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;
-      const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+    // Register Service Worker
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+    }
 
-      if (firestoreUsers && firestoreUsers.length > 0) {
-        const filtered = firestoreUsers.filter((u) => u.id && !deletedIds.includes(u.id));
-        setUsersList(filtered);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('trindade_users_list', JSON.stringify(filtered));
-        }
+    // Check if app is already running as standalone (PWA installed)
+    if (typeof window !== 'undefined') {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+      if (isStandalone) {
+        setIsAppInstalled(true);
       }
-    });
 
-    window.addEventListener('storage', loadSavedUsers);
-    window.addEventListener('trindade_users_updated', loadSavedUsers);
-    return () => {
-      unsub();
-      window.removeEventListener('storage', loadSavedUsers);
-      window.removeEventListener('trindade_users_updated', loadSavedUsers);
-    };
+      // Check iOS detection
+      const userAgent = window.navigator.userAgent.toLowerCase();
+      const isIOS = /iphone|ipad|ipod/.test(userAgent);
+      setIsIOSDevice(isIOS);
+
+      const handleBeforeInstallPrompt = (e: Event) => {
+        e.preventDefault();
+        setDeferredInstallPrompt(e);
+      };
+
+      const handleAppInstalled = () => {
+        setIsAppInstalled(true);
+        setDeferredInstallPrompt(null);
+        setInstallSuccessToast(true);
+        setTimeout(() => setInstallSuccessToast(false), 5000);
+      };
+
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.addEventListener('appinstalled', handleAppInstalled);
+
+      const unsub = subscribeUsers((firestoreUsers) => {
+        const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_user_ids') : null;
+        const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
+
+        if (firestoreUsers && firestoreUsers.length > 0) {
+          const filtered = firestoreUsers.filter((u) => u.id && !deletedIds.includes(u.id));
+          setUsersList(filtered);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('trindade_users_list', JSON.stringify(filtered));
+          }
+        }
+      });
+
+      window.addEventListener('storage', loadSavedUsers);
+      window.addEventListener('trindade_users_updated', loadSavedUsers);
+      return () => {
+        unsub();
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        window.removeEventListener('appinstalled', handleAppInstalled);
+        window.removeEventListener('storage', loadSavedUsers);
+        window.removeEventListener('trindade_users_updated', loadSavedUsers);
+      };
+    }
   }, []);
+
+  const handleInstallApp = async () => {
+    if (isIOSDevice) {
+      setShowIOSModal(true);
+      return;
+    }
+
+    if (deferredInstallPrompt) {
+      try {
+        deferredInstallPrompt.prompt();
+        const choiceResult = await deferredInstallPrompt.userChoice;
+        if (choiceResult.outcome === 'accepted') {
+          setIsAppInstalled(true);
+          setDeferredInstallPrompt(null);
+          setInstallSuccessToast(true);
+          setTimeout(() => setInstallSuccessToast(false), 5000);
+        }
+      } catch (err) {
+        console.error('Error invoking PWA install prompt:', err);
+      }
+    } else {
+      // If browser doesn't expose deferred prompt immediately, show guidance dialog
+      setShowIOSModal(true);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -507,9 +574,52 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 Identificação de Acesso
               </h1>
 
-              <p className="text-slate-600 text-sm leading-relaxed font-normal">
+              <p className="text-slate-600 text-sm leading-relaxed font-normal mb-6">
                 Identifique-se para entrar no sistema. Todos os colaboradores visualizam e gerenciam a mesma linha de produção em tempo real.
               </p>
+
+              {/* Install App Shortcut Banner */}
+              <div className="pt-5 border-t border-slate-100">
+                {isAppInstalled ? (
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[20px]">check_circle</span>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-emerald-900">Aplicativo Instalado</h4>
+                      <p className="text-[11px] text-emerald-700">Acesso direto via área de trabalho habilitado.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gradient-to-br from-slate-900 via-[#011627] to-blue-950 text-white rounded-2xl shadow-sm border border-blue-900/40 relative overflow-hidden group">
+                    <div className="flex items-start gap-3 relative z-1">
+                      <div className="w-10 h-10 rounded-xl bg-blue-600/30 border border-blue-400/40 text-blue-300 flex items-center justify-center shrink-0 shadow-inner">
+                        <span className="material-symbols-outlined text-[22px]">desktop_windows</span>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <span>Instalar Aplicativo no Dispositivo</span>
+                          <span className="px-1.5 py-0.2 text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-md">Atalho</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-300 leading-tight">
+                          Crie um ícone na sua Área de Trabalho ou Celular para abrir o sistema em tela cheia com 1 clique.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center gap-2 relative z-1">
+                      <button
+                        type="button"
+                        onClick={handleInstallApp}
+                        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                      >
+                        <span className="material-symbols-outlined text-[17px]">download_for_offline</span>
+                        <span>Baixar / Instalar Atalho</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -948,6 +1058,75 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             >
               Compreendi, Aguardar Liberação
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* PWA Installation Guide Modal (iOS / Other browsers fallback) */}
+      {showIOSModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl relative space-y-5 text-center">
+            <button
+              onClick={() => setShowIOSModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
+
+            <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center mx-auto shadow-sm">
+              <span className="material-symbols-outlined text-3xl">add_to_home_screen</span>
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-xl font-black text-slate-900">Como Instalar o Aplicativo</h3>
+              <p className="text-xs text-slate-500">
+                Siga os passos abaixo para fixar o Trindade PCP na sua Área de Trabalho ou Celular:
+              </p>
+            </div>
+
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-left text-xs text-slate-700 space-y-3">
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+                <div>
+                  <strong className="text-slate-900">No Computador (Chrome / Edge):</strong>
+                  <p className="text-slate-600 mt-0.5">Clique no ícone de instalação (computador com seta ou <strong>⊕</strong>) que aparece no canto direito da barra de endereços do navegador.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+                <div>
+                  <strong className="text-slate-900">No iPhone / iPad (Safari):</strong>
+                  <p className="text-slate-600 mt-0.5">Toque no botão <strong>Compartilhar</strong> (ícone com quadrado e seta para cima <span className="inline-block border border-slate-300 px-1 rounded bg-white">↑</span>) e selecione <strong>&quot;Adicionar à Tela de Início&quot;</strong>.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5">
+                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+                <div>
+                  <strong className="text-slate-900">No Android (Chrome):</strong>
+                  <p className="text-slate-600 mt-0.5">Toque no menu de 3 pontinhos <span className="inline-block border border-slate-300 px-1 rounded bg-white">⋮</span> no topo e selecione <strong>&quot;Instalar aplicativo&quot;</strong> ou <strong>&quot;Adicionar à tela inicial&quot;</strong>.</p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowIOSModal(false)}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all shadow-md cursor-pointer"
+            >
+              Entendido!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Installation Success Toast */}
+      {installSuccessToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3.5 rounded-2xl shadow-xl border border-emerald-500 flex items-center gap-3 animate-bounce">
+          <span className="material-symbols-outlined text-2xl text-emerald-200">task_alt</span>
+          <div>
+            <p className="text-xs font-bold">Atalho Instalado com Sucesso!</p>
+            <p className="text-[11px] text-emerald-100">O ícone do Trindade PCP já está disponível na sua Área de Trabalho.</p>
           </div>
         </div>
       )}
