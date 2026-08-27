@@ -423,14 +423,14 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                         <div className="overflow-x-auto">
                           <table className="w-full text-left border-collapse">
                             <thead>
-                              <tr className="bg-slate-50/50 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-100">
-                                <th className="px-5 py-3.5">OP / Pedido</th>
-                                <th className="px-5 py-3.5">Descrição da Peça</th>
-                                <th className="px-5 py-3.5 text-center">Qtd</th>
-                                <th className="px-5 py-3.5">Prev. Entrega</th>
-                                <th className="px-5 py-3.5">Montador Atribuído</th>
-                                <th className="px-5 py-3.5">Status / Urgência</th>
-                                <th className="px-5 py-3.5 text-right">Agendar & Ações</th>
+                              <tr className="bg-slate-50/70 text-slate-500 font-bold text-[10px] uppercase tracking-wider border-b border-slate-100">
+                                <th className="px-2.5 py-2.5 whitespace-nowrap">OP / Pedido</th>
+                                <th className="px-2.5 py-2.5">Descrição da Peça</th>
+                                <th className="px-2 py-2.5 text-center whitespace-nowrap w-12">Qtd</th>
+                                <th className="px-2.5 py-2.5 whitespace-nowrap">Prev. Entrega</th>
+                                <th className="px-2.5 py-2.5 whitespace-nowrap">Montador</th>
+                                <th className="px-2.5 py-2.5 whitespace-nowrap">Status / Urgência</th>
+                                <th className="px-2.5 py-2.5 text-right whitespace-nowrap">Agendar & Ações</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-xs">
@@ -444,26 +444,26 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                                   }`}
                                 >
                                   {/* OP Number */}
-                                  <td className="px-5 py-4 whitespace-nowrap">
+                                  <td className="px-2.5 py-2.5 whitespace-nowrap font-bold text-blue-600">
                                     <button
                                       type="button"
                                       onClick={() => setSelectedOrderForStatusModal(ord)}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs transition-colors cursor-pointer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold font-mono text-xs transition-colors cursor-pointer"
                                       title="Clique para abrir histórico e status"
                                     >
                                       <span>OP: {ord.orderId}</span>
-                                      <span className="material-symbols-outlined text-[14px]">edit_note</span>
+                                      <span className="material-symbols-outlined text-[13px]">edit_note</span>
                                     </button>
                                   </td>
 
                                   {/* Item Description */}
-                                  <td className="px-5 py-4 text-slate-800 font-semibold min-w-[200px]">
-                                    <div className="flex items-center gap-2">
+                                  <td className="px-2.5 py-2.5 text-slate-800 font-semibold min-w-[140px] max-w-[240px]">
+                                    <div className="flex items-center gap-1.5">
                                       {ord.imageUrl && (
                                         <button
                                           type="button"
                                           onClick={() => setSelectedOrderForStatusModal(ord)}
-                                          className="relative w-7 h-7 rounded-md overflow-hidden border border-blue-200 shrink-0 group cursor-pointer hover:border-blue-500 transition-all"
+                                          className="relative w-6 h-6 rounded overflow-hidden border border-blue-200 shrink-0 group cursor-pointer hover:border-blue-500 transition-all"
                                           title="Ver imagem / desenho técnico"
                                         >
                                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -473,37 +473,39 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform"
                                           />
                                           <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                            <span className="material-symbols-outlined text-white text-[11px]">zoom_in</span>
+                                            <span className="material-symbols-outlined text-white text-[10px]">zoom_in</span>
                                           </div>
                                         </button>
                                       )}
-                                      <span>{ord.itemDescription}</span>
+                                      <span className="truncate block text-xs" title={ord.itemDescription}>
+                                        {ord.itemDescription}
+                                      </span>
                                     </div>
                                   </td>
 
                                   {/* Quantity */}
-                                  <td className="px-5 py-4 text-center font-bold text-slate-900 whitespace-nowrap">
+                                  <td className="px-2 py-2.5 text-center font-bold text-slate-900 whitespace-nowrap">
                                     {ord.quantity}
                                   </td>
 
                                   {/* Delivery Date */}
-                                  <td className="px-5 py-4 whitespace-nowrap">
+                                  <td className="px-2.5 py-2.5 whitespace-nowrap">
                                     {ord.deliveryDate ? (
-                                      <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-900 border border-amber-200/80 px-2.5 py-1 rounded-lg font-bold text-[11px]">
-                                        <span className="material-symbols-outlined text-xs text-amber-600">event</span>
+                                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-900 border border-amber-200/80 px-2 py-0.5 rounded-md font-bold text-[10px]">
+                                        <span className="material-symbols-outlined text-[12px] text-amber-600">event</span>
                                         {ord.deliveryDate}
                                       </span>
                                     ) : (
-                                      <span className="text-slate-400 italic text-[11px]">Sem data</span>
+                                      <span className="text-slate-400 italic text-[10px]">Sem data</span>
                                     )}
                                   </td>
 
                                   {/* Operator */}
-                                  <td className="px-5 py-4 whitespace-nowrap text-slate-600">
+                                  <td className="px-2.5 py-2.5 whitespace-nowrap text-slate-600">
                                     {ord.assignedOperatorName ? (
-                                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md font-medium text-[11px]">
-                                        <span className="material-symbols-outlined text-xs text-slate-500">person</span>
-                                        {ord.assignedOperatorName}
+                                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md font-medium text-[11px] max-w-[130px] truncate">
+                                        <span className="material-symbols-outlined text-[12px] text-slate-500 shrink-0">person</span>
+                                        <span className="truncate">{ord.assignedOperatorName}</span>
                                       </span>
                                     ) : (
                                       <span className="text-slate-400 italic text-[11px]">Não atribuído</span>
@@ -511,29 +513,29 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                                   </td>
 
                                   {/* Status / Urgency */}
-                                  <td className="px-5 py-4 whitespace-nowrap">
-                                    <div className="flex flex-col gap-1 items-start">
+                                  <td className="px-2.5 py-2.5 whitespace-nowrap">
+                                    <div className="flex flex-col gap-0.5 items-start">
                                       {ord.urgencyRequest?.status === 'pending' && (
                                         <button
                                           type="button"
                                           onClick={() => setSelectedOrderForStatusModal(ord)}
-                                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-2 py-0.5 rounded-md text-[10px] inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-1.5 py-0.2 rounded text-[9px] inline-flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                                           title="Clique para avaliar urgência"
                                         >
-                                          <span className="material-symbols-outlined text-[12px]">bolt</span>
-                                          <span>Urgência Solicitada</span>
+                                          <span className="material-symbols-outlined text-[10px]">bolt</span>
+                                          <span>Urgência</span>
                                         </button>
                                       )}
-                                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded text-[9px] font-bold">
                                         <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                        Aguardando Data
+                                        Aguardando
                                       </span>
                                     </div>
                                   </td>
 
                                   {/* Actions */}
-                                  <td className="px-5 py-4 text-right whitespace-nowrap">
-                                    <div className="flex items-center justify-end gap-2">
+                                  <td className="px-2.5 py-2.5 text-right whitespace-nowrap">
+                                    <div className="flex items-center justify-end gap-1">
                                       {/* Schedule Date Button */}
                                       {!isReadOnly && (
                                         <button
@@ -544,11 +546,11 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                                             setScheduleNote('');
                                             setCustomDate('');
                                           }}
-                                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                          className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer shadow-xs"
                                           title="Definir data de produção e mover para o Kanban"
                                         >
-                                          <span className="material-symbols-outlined text-sm">event</span>
-                                          <span>Agendar Data</span>
+                                          <span className="material-symbols-outlined text-[14px]">event</span>
+                                          <span>Agendar</span>
                                         </button>
                                       )}
 
@@ -556,7 +558,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                                       <button
                                         type="button"
                                         onClick={() => setSelectedOrderForStatusModal(ord)}
-                                        className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                        className="p-1 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
                                         title="Ver histórico e gerenciar"
                                       >
                                         <span className="material-symbols-outlined text-lg">visibility</span>

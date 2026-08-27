@@ -893,24 +893,24 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
-                      <tr className="bg-slate-50/50 text-slate-400 font-bold text-[11px] uppercase tracking-wider border-b border-slate-100">
-                        <th className="px-5 py-3.5">Pedido / OP</th>
-                        <th className="px-5 py-3.5">Loja / Cliente</th>
-                        <th className="px-5 py-3.5">Descrição do Item</th>
-                        <th className="px-5 py-3.5 text-center">Qtd</th>
-                        <th className="px-5 py-3.5">Montador Responsável</th>
-                        <th className="px-5 py-3.5">Prioridade</th>
-                        <th className="px-5 py-3.5">Progresso</th>
-                        <th className="px-5 py-3.5">Data Programada</th>
-                        <th className="px-5 py-3.5">Mover de Etapa</th>
-                        <th className="px-5 py-3.5 text-right">Ações</th>
+                      <tr className="bg-slate-50/70 text-slate-500 font-bold text-[10px] uppercase tracking-wider border-b border-slate-100">
+                        <th className="px-2.5 py-2.5 whitespace-nowrap">OP / Pedido</th>
+                        <th className="px-2.5 py-2.5 whitespace-nowrap">Loja / Cliente</th>
+                        <th className="px-2.5 py-2.5">Descrição da Peça</th>
+                        <th className="px-2 py-2.5 text-center whitespace-nowrap w-12">Qtd</th>
+                        <th className="px-2.5 py-2.5 whitespace-nowrap">Montador</th>
+                        <th className="px-2 py-2.5 whitespace-nowrap">Prioridade</th>
+                        <th className="px-2.5 py-2.5 whitespace-nowrap w-24">Progresso</th>
+                        <th className="px-2.5 py-2.5 whitespace-nowrap">Data Programada</th>
+                        <th className="px-2.5 py-2.5 whitespace-nowrap">Etapa</th>
+                        <th className="px-2 py-2.5 text-right whitespace-nowrap w-14">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
                       {colOrders.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className="px-6 py-8 text-center text-slate-400 bg-white">
-                            <span className="material-symbols-outlined text-[32px] text-slate-300 block mb-1">
+                          <td colSpan={10} className="px-4 py-8 text-center text-slate-400 bg-white">
+                            <span className="material-symbols-outlined text-[30px] text-slate-300 block mb-1">
                               inbox
                             </span>
                             <p className="font-semibold text-slate-600 text-xs">Nenhum pedido nesta etapa</p>
@@ -931,32 +931,37 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                 : 'hover:bg-slate-50/80'
                             }`}
                           >
-                            <td className="px-5 py-4 font-bold text-blue-600">
+                            {/* OP */}
+                            <td className="px-2.5 py-2.5 whitespace-nowrap font-bold text-blue-600">
                               <button
                                 type="button"
                                 onClick={() => setSelectedOrderForStatusModal(ord)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold font-mono text-xs transition-colors cursor-pointer"
                                 title="Clique para abrir e relatar status / motivo da OP"
                               >
                                 <span>{ord.orderId}</span>
-                                <span className="material-symbols-outlined text-[14px]">edit_note</span>
+                                <span className="material-symbols-outlined text-[13px]">edit_note</span>
                               </button>
                             </td>
-                            <td className="px-5 py-4 font-semibold text-slate-900">
-                              <div className="flex items-center gap-2">
-                                <span className="w-6 h-6 rounded-md bg-blue-50 text-blue-600 text-[10px] font-bold flex items-center justify-center shrink-0">
+
+                            {/* Store */}
+                            <td className="px-2.5 py-2.5 whitespace-nowrap font-semibold text-slate-900">
+                              <div className="flex items-center gap-1.5 max-w-[130px]" title={ord.store}>
+                                <span className="w-5 h-5 rounded bg-blue-50 text-blue-600 text-[9px] font-bold flex items-center justify-center shrink-0">
                                   {ord.storeInitials}
                                 </span>
-                                <span>{ord.store}</span>
+                                <span className="truncate">{ord.store}</span>
                               </div>
                             </td>
-                            <td className="px-5 py-4 text-slate-700 font-medium">
-                              <div className="flex items-center gap-2">
+
+                            {/* Description */}
+                            <td className="px-2.5 py-2.5 text-slate-700 font-medium min-w-[140px] max-w-[220px]">
+                              <div className="flex items-center gap-1.5">
                                 {ord.imageUrl && (
                                   <button
                                     type="button"
                                     onClick={() => setSelectedOrderForStatusModal(ord)}
-                                    className="relative w-7 h-7 rounded-md overflow-hidden border border-blue-200 shrink-0 group cursor-pointer hover:border-blue-500 transition-all"
+                                    className="relative w-6 h-6 rounded overflow-hidden border border-blue-200 shrink-0 group cursor-pointer hover:border-blue-500 transition-all"
                                     title="Ver imagem / desenho técnico"
                                   >
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -966,21 +971,27 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                       className="w-full h-full object-cover group-hover:scale-110 transition-transform"
                                     />
                                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                      <span className="material-symbols-outlined text-white text-[11px]">zoom_in</span>
+                                      <span className="material-symbols-outlined text-white text-[10px]">zoom_in</span>
                                     </div>
                                   </button>
                                 )}
-                                <span>{ord.itemDescription}</span>
+                                <span className="truncate block text-xs" title={ord.itemDescription}>
+                                  {ord.itemDescription}
+                                </span>
                               </div>
                             </td>
-                            <td className="px-5 py-4 text-center font-bold text-slate-900">
+
+                            {/* Quantity */}
+                            <td className="px-2 py-2.5 text-center font-bold text-slate-900 whitespace-nowrap">
                               {ord.quantity}
                             </td>
-                            <td className="px-5 py-4">
+
+                            {/* Operator */}
+                            <td className="px-2.5 py-2.5 whitespace-nowrap">
                               {isReadOnly ? (
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold">
-                                  <span className="material-symbols-outlined text-[14px] text-slate-500">engineering</span>
-                                  <span>{ord.assignedOperatorName ? (ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName) : 'Não designado'}</span>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold max-w-[125px] truncate">
+                                  <span className="material-symbols-outlined text-[13px] text-slate-500 shrink-0">engineering</span>
+                                  <span className="truncate">{ord.assignedOperatorName ? (ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName) : 'Não designado'}</span>
                                 </span>
                               ) : ord.assignedOperatorName ? (
                                 <button
@@ -989,11 +1000,11 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                     setSelectedOrderForOperator(ord);
                                     setIsOperatorModalOpen(true);
                                   }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold hover:bg-emerald-100 transition-colors cursor-pointer max-w-[125px] truncate"
                                   title="Clique para alterar montador"
                                 >
-                                  <span className="material-symbols-outlined text-[14px] text-emerald-600">engineering</span>
-                                  <span>{ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName}</span>
+                                  <span className="material-symbols-outlined text-[13px] text-emerald-600 shrink-0">engineering</span>
+                                  <span className="truncate">{ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName}</span>
                                 </button>
                               ) : (
                                 <button
@@ -1002,23 +1013,25 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                     setSelectedOrderForOperator(ord);
                                     setIsOperatorModalOpen(true);
                                   }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-dashed border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 text-xs font-medium transition-colors cursor-pointer"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-dashed border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 text-[11px] font-medium transition-colors cursor-pointer"
                                   title="Designar montador"
                                 >
-                                  <span className="material-symbols-outlined text-[14px] text-blue-500">person_add</span>
+                                  <span className="material-symbols-outlined text-[13px] text-blue-500 shrink-0">person_add</span>
                                   <span>Designar</span>
                                 </button>
                               )}
                             </td>
-                            <td className="px-5 py-4">
-                              <div className="flex flex-col gap-1 items-start">
+
+                            {/* Priority */}
+                            <td className="px-2 py-2.5 whitespace-nowrap">
+                              <div className="flex flex-col gap-0.5 items-start">
                                 {ord.priority === 'ALTA PRIORIDADE' ? (
-                                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[10px] font-bold">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                  <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded text-[9px] font-bold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
                                     ALTA
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-medium">
+                                  <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded text-[9px] font-medium">
                                     NORMAL
                                   </span>
                                 )}
@@ -1027,45 +1040,49 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => setSelectedOrderForStatusModal(ord)}
-                                    className="inline-flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white font-bold px-2 py-0.5 rounded text-[10px] cursor-pointer shadow-2xs transition-colors"
+                                    className="inline-flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white font-bold px-1.5 py-0.2 rounded text-[9px] cursor-pointer shadow-2xs transition-colors"
                                     title="Urgência Solicitada pelo Vendedor - Clique para avaliar"
                                   >
-                                    <span className="material-symbols-outlined text-[12px] text-white">bolt</span>
-                                    <span>Urgência Solicitada</span>
+                                    <span className="material-symbols-outlined text-[10px] text-white">bolt</span>
+                                    <span>Urgência</span>
                                   </button>
                                 )}
                                 {ord.urgencyRequest?.status === 'approved' && (
-                                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] font-medium">
-                                    <span>Urgência Aceita</span>
+                                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded text-[9px] font-medium">
+                                    <span>Urg. Aceita</span>
                                   </span>
                                 )}
                                 {ord.urgencyRequest?.status === 'rejected' && (
                                   <span
-                                    className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-md text-[10px] font-medium"
+                                    className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.2 rounded text-[9px] font-medium"
                                     title={`Recusada por ${ord.urgencyRequest.evaluatedBy}: ${ord.urgencyRequest.evaluatorNote}`}
                                   >
-                                    <span className="material-symbols-outlined text-[11px] text-slate-400">info</span>
-                                    <span>Urgência Recusada</span>
+                                    <span className="material-symbols-outlined text-[10px] text-slate-400">info</span>
+                                    <span>Recusada</span>
                                   </span>
                                 )}
                               </div>
                             </td>
-                            <td className="px-5 py-4 w-36">
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+
+                            {/* Progress */}
+                            <td className="px-2.5 py-2.5 w-24 whitespace-nowrap">
+                              <div className="space-y-0.5">
+                                <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold">
                                   <span>{ord.progress}%</span>
                                 </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                   <div
-                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
                                     style={{ width: `${ord.progress}%` }}
                                   />
                                 </div>
                               </div>
                             </td>
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-1.5 px-2.5 py-1 border border-slate-200 rounded-lg bg-slate-50 text-xs w-40">
-                                <span className={`material-symbols-outlined text-[14px] shrink-0 ${ord.column === 'nao_planejado' ? 'text-amber-600' : 'text-blue-600'}`}>
+
+                            {/* Date */}
+                            <td className="px-2.5 py-2.5 whitespace-nowrap">
+                              <div className="flex items-center gap-1 px-2 py-0.5 border border-slate-200 rounded-md bg-slate-50 text-xs w-32">
+                                <span className={`material-symbols-outlined text-[13px] shrink-0 ${ord.column === 'nao_planejado' ? 'text-amber-600' : 'text-blue-600'}`}>
                                   calendar_today
                                 </span>
                                 <input
@@ -1075,20 +1092,22 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                   value={ord.column === 'nao_planejado' && (!ord.productionDate || ord.productionDate === 'Aguardando Data') ? 'Aguardando Data' : (ord.productionDate || '')}
                                   onChange={(e) => handleUpdateDate(ord.id, e.target.value)}
                                   placeholder="Aguardando Data"
-                                  className="bg-transparent border-none p-0 text-xs font-medium focus:ring-0 w-full text-slate-900 placeholder:text-slate-400"
+                                  className="bg-transparent border-none p-0 text-[11px] font-medium focus:ring-0 w-full text-slate-900 placeholder:text-slate-400"
                                 />
                               </div>
                             </td>
-                            <td className="px-5 py-4">
+
+                            {/* Move Stage */}
+                            <td className="px-2.5 py-2.5 whitespace-nowrap">
                               {isReadOnly ? (
-                                <span className="inline-block px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold max-w-[160px] truncate">
+                                <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[11px] font-semibold max-w-[120px] truncate">
                                   {allColumnsConfig.find(c => c.id === ord.column)?.title || ord.column}
                                 </span>
                               ) : (
                                 <select
                                   value={ord.column}
                                   onChange={(e) => handleQuickMove(ord.id, e.target.value as KanbanColumnId)}
-                                  className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[160px] truncate"
+                                  className="px-2 py-0.5 bg-white border border-slate-200 rounded-md text-[11px] font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[120px] truncate"
                                 >
                                   {allColumnsConfig.map((c) => (
                                     <option key={c.id} value={c.id}>
@@ -1098,24 +1117,26 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                                 </select>
                               )}
                             </td>
-                            <td className="px-5 py-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
+
+                            {/* Actions */}
+                            <td className="px-2 py-2.5 text-right whitespace-nowrap w-14">
+                              <div className="flex items-center justify-end gap-0.5">
                                 <button
                                   type="button"
                                   onClick={() => setSelectedOrderForStatusModal(ord)}
-                                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                  className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
                                   title="Relatar status / motivo da OP"
                                 >
-                                  <span className="material-symbols-outlined text-[18px]">edit_note</span>
+                                  <span className="material-symbols-outlined text-[16px]">edit_note</span>
                                 </button>
                                 {!isReadOnly && (
                                   <button
                                     type="button"
                                     onClick={() => setOrderToDelete(ord)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
                                     title="Excluir pedido"
                                   >
-                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                    <span className="material-symbols-outlined text-[16px]">delete</span>
                                   </button>
                                 )}
                               </div>

@@ -206,7 +206,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-[1440px] mx-auto space-y-6 sm:space-y-8 animate-fadeIn">
+    <div className="p-4 sm:p-6 w-full max-w-[1600px] mx-auto space-y-6 animate-fadeIn">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
         <div className="flex items-center gap-4">
@@ -448,8 +448,8 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-100/80 text-slate-600 text-[11px] font-extrabold uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-3.5 px-3 text-center w-10">
+                <tr className="bg-slate-100/80 text-slate-600 text-[10px] font-extrabold uppercase tracking-wider border-b border-slate-200">
+                  <th className="py-2.5 px-2 text-center w-8">
                     <input
                       type="checkbox"
                       checked={
@@ -457,18 +457,18 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                         filteredCompletedOrders.every((o) => selectedOrderIdsForBatch.includes(o.id))
                       }
                       onChange={handleToggleSelectAllFiltered}
-                      className="w-4 h-4 text-blue-600 rounded-xs border-slate-300 focus:ring-blue-500 cursor-pointer"
+                      className="w-3.5 h-3.5 text-blue-600 rounded-xs border-slate-300 focus:ring-blue-500 cursor-pointer"
                       title="Marcar / desmarcar todos"
                     />
                   </th>
-                  <th className="py-3.5 px-4">OP / N° Pedido</th>
-                  <th className="py-3.5 px-4">Loja / Cliente</th>
-                  <th className="py-3.5 px-4">Descrição da Esquadria / Item</th>
-                  <th className="py-3.5 px-4 text-center">Qtd.</th>
-                  <th className="py-3.5 px-4">Montador Responsável</th>
-                  <th className="py-3.5 px-4">Data de Conclusão</th>
-                  <th className="py-3.5 px-4 text-center">Status</th>
-                  <th className="py-3.5 px-4 text-right">Ações</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">OP / Pedido</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Loja / Cliente</th>
+                  <th className="py-2.5 px-2.5">Descrição da Peça</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap w-12">Qtd</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Montador</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Conclusão</th>
+                  <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
+                  <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -485,86 +485,76 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                       }`}
                     >
                       {/* Checkbox */}
-                      <td className="py-4 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-2.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => handleToggleSelectOrder(ord.id)}
-                          className="w-4 h-4 text-blue-600 rounded-xs border-slate-300 focus:ring-blue-500 cursor-pointer"
+                          className="w-3.5 h-3.5 text-blue-600 rounded-xs border-slate-300 focus:ring-blue-500 cursor-pointer"
                         />
                       </td>
 
                       {/* OP / N° Pedido */}
-                      <td className="py-4 px-4 font-bold text-slate-900 whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1.5 text-slate-800 text-xs font-mono font-semibold">
-                          <span className="material-symbols-outlined text-[14px] text-slate-400">task_alt</span>
-                          <span>OP #{ord.orderId}</span>
+                      <td className="py-2.5 px-2.5 font-bold text-slate-900 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1 text-slate-800 text-xs font-mono font-semibold">
+                          <span className="material-symbols-outlined text-[13px] text-slate-400">task_alt</span>
+                          <span>#{ord.orderId}</span>
                         </div>
                       </td>
 
                       {/* Loja / Cliente */}
-                      <td className="py-4 px-4">
-                        <span className="inline-flex items-center gap-1.5 text-slate-700 font-medium text-xs">
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 text-slate-700 font-medium text-xs max-w-[130px]" title={ord.store}>
                           <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                          <span>{ord.store}</span>
+                          <span className="truncate">{ord.store}</span>
                         </span>
                       </td>
 
                       {/* Descrição da Esquadria */}
-                      <td className="py-4 px-4 font-medium text-slate-800 max-w-xs">
-                        <div className="line-clamp-2" title={ord.itemDescription}>
+                      <td className="py-2.5 px-2.5 font-medium text-slate-800 min-w-[140px] max-w-[240px]">
+                        <div className="truncate text-xs" title={ord.itemDescription}>
                           {ord.itemDescription}
                         </div>
                       </td>
 
                       {/* Quantidade */}
-                      <td className="py-4 px-4 text-center whitespace-nowrap">
-                        <span className="font-medium text-slate-700 text-xs">
-                          {ord.quantity} {ord.unit || 'un'}
-                        </span>
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap font-bold text-slate-800 text-xs">
+                        {ord.quantity}
                       </td>
 
                       {/* Montador Responsável */}
-                      <td className="py-4 px-4 whitespace-nowrap">
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
                         {ord.assignedOperatorName ? (
-                          <div className="inline-flex items-center gap-1.5 text-slate-700 font-medium text-xs">
-                            <span className="material-symbols-outlined text-slate-400 text-sm">engineering</span>
-                            <span>
+                          <div className="inline-flex items-center gap-1 text-slate-700 font-medium text-[11px] max-w-[125px]" title={ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName}>
+                            <span className="material-symbols-outlined text-slate-400 text-[13px] shrink-0">engineering</span>
+                            <span className="truncate">
                               {ord.assignedOperatorCode ? `${ord.assignedOperatorCode} - ${ord.assignedOperatorName}` : ord.assignedOperatorName}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400 italic text-[11px]">Nenhum montador vinculado</span>
+                          <span className="text-slate-400 italic text-[10px]">Sem montador</span>
                         )}
                       </td>
 
                       {/* Data de Conclusão */}
-                      <td className="py-4 px-4 whitespace-nowrap font-medium text-slate-600">
-                        <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                          <span className="material-symbols-outlined text-sm text-slate-400">event_available</span>
+                      <td className="py-2.5 px-2.5 whitespace-nowrap font-medium text-slate-600">
+                        <div className="flex items-center gap-1 text-[11px] text-slate-600">
+                          <span className="material-symbols-outlined text-[13px] text-slate-400">event_available</span>
                           <span>{completionDate}</span>
                         </div>
                       </td>
 
                       {/* Status & Urgência */}
-                      <td className="py-4 px-4 text-center whitespace-nowrap">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-medium">
-                            <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
-                            <span>100% Concluído</span>
-                          </span>
-
-                          {ord.priority === 'ALTA PRIORIDADE' && (
-                            <span className="text-amber-700 text-[10px] font-medium">
-                              Alta Prioridade
-                            </span>
-                          )}
-                        </div>
+                      <td className="py-2.5 px-2 text-center whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                          <span className="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>
+                          <span>100%</span>
+                        </span>
                       </td>
 
                       {/* Actions */}
-                      <td className="py-4 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-2.5 px-2.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
                           {/* Imprimir Etiqueta da Peça */}
                           <button
                             type="button"
@@ -573,9 +563,9 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                               handleOpenBatchLabels([ord], `OP #${ord.orderId}`);
                             }}
                             title="Imprimir etiqueta Zebra desta peça"
-                            className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200/80 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                            className="px-2 py-1 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 rounded-lg font-bold text-[11px] transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                           >
-                            <span className="material-symbols-outlined text-sm">qr_code_2</span>
+                            <span className="material-symbols-outlined text-[14px]">qr_code_2</span>
                             <span>Etiqueta</span>
                           </button>
 
@@ -587,9 +577,9 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                               setOrderToRemake(ord);
                             }}
                             title="Voltar pedido para ser refeito na fábrica"
-                            className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-bold text-[11px] transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                           >
-                            <span className="material-symbols-outlined text-sm text-amber-600">replay</span>
+                            <span className="material-symbols-outlined text-[14px] text-amber-600">replay</span>
                             <span>Refazer</span>
                           </button>
 
@@ -601,9 +591,9 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                               setOrderToDelete(ord);
                             }}
                             title="Excluir pedido definitivamente"
-                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-rose-600 border border-slate-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
+                            className="px-2 py-1 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-700 border border-slate-200 rounded-lg font-bold text-[11px] transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                           >
-                            <span className="material-symbols-outlined text-sm text-slate-500">delete</span>
+                            <span className="material-symbols-outlined text-[14px] text-slate-500">delete</span>
                             <span>Excluir</span>
                           </button>
 
@@ -615,10 +605,10 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                               setSelectedOrderForModal(ord);
                             }}
                             title="Ver histórico detalhado do pedido"
-                            className="px-2.5 py-1.5 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1 cursor-pointer border border-slate-200 shadow-2xs"
+                            className="px-2 py-1 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 border border-slate-200 rounded-lg font-bold text-[11px] transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                           >
-                            <span className="material-symbols-outlined text-sm">visibility</span>
-                            <span className="hidden xl:inline">Histórico</span>
+                            <span className="material-symbols-outlined text-[14px]">visibility</span>
+                            <span>Histórico</span>
                           </button>
                         </div>
                       </td>
