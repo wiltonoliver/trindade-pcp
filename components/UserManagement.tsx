@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, UserPermissions, UserStatus, AssemblyOperator } from '@/types/factory';
 import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { TrindadeLogo } from './TrindadeLogo';
-import { subscribeUsers, saveUserToFirestore, deleteUserFromFirestore, deleteOperatorFromFirestore } from '@/lib/firestoreSync';
+import { subscribeUsers, saveUserToFirestore, deleteUserFromFirestore, deleteOperatorFromFirestore, saveOperatorToFirestore } from '@/lib/firestoreSync';
 
 interface UserManagementProps {
   currentUser?: UserProfile | null;
@@ -196,7 +196,7 @@ const INITIAL_USERS: UserProfile[] = [
 
 export const UserManagement: React.FC<UserManagementProps> = ({
   currentUser,
-  operators = INITIAL_OPERATORS,
+  operators = [],
   setOperators,
 }) => {
   const [activeSectionTab, setActiveSectionTab] = useState<'users' | 'operators'>('users');
@@ -366,22 +366,22 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     if (!opName.trim()) return;
 
     if (editingOperator) {
+      const updatedOp: AssemblyOperator = {
+        ...editingOperator,
+        code: opCode,
+        name: opName.trim(),
+        role: opRole,
+        specialty: opSpecialty,
+        shift: opShift,
+        plant: opPlant,
+        phone: opPhone,
+        status: opStatus,
+      };
       const updated = operators.map((op) =>
-        op.id === editingOperator.id
-          ? {
-              ...op,
-              code: opCode,
-              name: opName.trim(),
-              role: opRole,
-              specialty: opSpecialty,
-              shift: opShift,
-              plant: opPlant,
-              phone: opPhone,
-              status: opStatus,
-            }
-          : op
+        op.id === editingOperator.id ? updatedOp : op
       );
       if (setOperators) setOperators(updated);
+      saveOperatorToFirestore(updatedOp).catch((err) => console.error('Erro ao salvar operador no Firestore:', err));
     } else {
       const newOp: AssemblyOperator = {
         id: `op-${Date.now()}`,
@@ -396,21 +396,21 @@ export const UserManagement: React.FC<UserManagementProps> = ({
         createdAt: new Date().toISOString().split('T')[0],
       };
       if (setOperators) setOperators([...operators, newOp]);
+      saveOperatorToFirestore(newOp).catch((err) => console.error('Erro ao salvar novo operador no Firestore:', err));
     }
     setIsOperatorModalOpen(false);
   };
 
   const handleToggleOperatorStatus = (opId: string) => {
-    const updated = operators.map((op) => {
-      if (op.id === opId) {
-        return {
-          ...op,
-          status: op.status === 'Ativo' ? ('Inativo' as const) : ('Ativo' as const),
-        };
-      }
-      return op;
-    });
+    const target = operators.find((op) => op.id === opId);
+    if (!target) return;
+    const updatedOp: AssemblyOperator = {
+      ...target,
+      status: target.status === 'Ativo' ? ('Inativo' as const) : ('Ativo' as const),
+    };
+    const updated = operators.map((op) => (op.id === opId ? updatedOp : op));
     if (setOperators) setOperators(updated);
+    saveOperatorToFirestore(updatedOp).catch((err) => console.error('Erro ao alternar status do operador:', err));
   };
 
   const handleDeleteOperator = (opId: string) => {

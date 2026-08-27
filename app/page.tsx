@@ -150,15 +150,26 @@ export default function FactoryOpsApp() {
       if (savedOperators) {
         try {
           const parsedOps = JSON.parse(savedOperators);
-          if (Array.isArray(parsedOps)) {
+          const hasLegacyMock = Array.isArray(parsedOps) && parsedOps.some((op: AssemblyOperator) =>
+            ['op-101', 'op-102', 'op-103', 'op-104'].includes(op.id) ||
+            ['Roberto Souza', 'Marcos Paulo', 'Lucas Ferreira', 'Antonio Carlos'].includes(op.name)
+          );
+          if (hasLegacyMock) {
+            const cleaned = parsedOps.filter((op: AssemblyOperator) =>
+              !['op-101', 'op-102', 'op-103', 'op-104'].includes(op.id) &&
+              !['Roberto Souza', 'Marcos Paulo', 'Lucas Ferreira', 'Antonio Carlos'].includes(op.name)
+            );
+            localStorage.setItem('factoryops_operators', JSON.stringify(cleaned));
+            setOperators(cleaned);
+          } else if (Array.isArray(parsedOps)) {
             const filteredOps = parsedOps.filter((op: AssemblyOperator) => op.id && !deletedOpIds.includes(op.id));
             setOperators(filteredOps);
           }
         } catch (e) {
           console.error('Error parsing saved operators from localStorage', e);
         }
-      } else if (deletedOpIds.length > 0) {
-        setOperators(INITIAL_OPERATORS.filter((op) => !deletedOpIds.includes(op.id)));
+      } else {
+        setOperators([]);
       }
 
       if (savedMaterials) {
@@ -198,7 +209,7 @@ export default function FactoryOpsApp() {
     localStorage.removeItem('trindade_deleted_operator_ids');
     setOrders([]);
     setStores([]);
-    setOperators(INITIAL_OPERATORS);
+    setOperators([]);
   };
 
   // Subscribe to real-time Firestore updates

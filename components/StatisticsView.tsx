@@ -143,7 +143,7 @@ interface StatisticsViewProps {
 export const StatisticsView: React.FC<StatisticsViewProps> = ({
   orders,
   setOrders,
-  operators = INITIAL_OPERATORS,
+  operators = [],
   searchQuery = '',
 }) => {
   const [activeDashTab, setActiveDashTab] = useState<'dash' | 'reasons' | 'ranking'>('dash');

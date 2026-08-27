@@ -27,7 +27,7 @@ interface PlanningDashboardProps {
 export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   orders,
   setOrders,
-  operators = INITIAL_OPERATORS,
+  operators = [],
   searchQuery,
   onNavigateToOrderEntry,
   onNavigateToPendingCheckouts,

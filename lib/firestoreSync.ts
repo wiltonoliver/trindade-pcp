@@ -52,11 +52,13 @@ export const subscribeOperators = (onUpdate: (operators: AssemblyOperator[]) => 
     (snapshot) => {
       const list: AssemblyOperator[] = [];
       snapshot.forEach((docSnap) => {
-        list.push(docSnap.data() as AssemblyOperator);
+        const data = docSnap.data() as AssemblyOperator;
+        // Filter out old legacy mock operators if any remain in remote
+        if (data && !['op-101', 'op-102', 'op-103', 'op-104'].includes(data.id)) {
+          list.push(data);
+        }
       });
-      if (list.length > 0) {
-        onUpdate(list);
-      }
+      onUpdate(list);
     },
     (err) => {
       console.error('Erro no ouvinte de Operadores do Firestore:', err);
