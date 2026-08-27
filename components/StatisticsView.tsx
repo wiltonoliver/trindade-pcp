@@ -1449,40 +1449,164 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
       </div>
       )}
 
-      {/* Unassigned Orders Alert Banner if any */}
+      {/* Unassigned Orders Alert Banner & Detailed Interactive List */}
       {unassignedOrders.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0">
-              <span className="material-symbols-outlined text-2xl">warning</span>
+        <div className="bg-amber-50/90 border border-amber-200 rounded-3xl p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 bg-amber-500 text-white rounded-2xl shrink-0 shadow-xs">
+                <span className="material-symbols-outlined text-2xl">person_add</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="font-black text-amber-950 text-base">
+                    Pedidos Baixados Sem Montador ({unassignedOrders.length})
+                  </h4>
+                  <span className="px-2.5 py-0.5 bg-amber-200/80 text-amber-900 font-black text-xs rounded-full border border-amber-300">
+                    {unassignedQty} peças no total
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800/90 mt-1">
+                  Clique em qualquer peça da lista abaixo ou no botão para selecionar o montador responsável.
+                </p>
+              </div>
             </div>
-            <div>
-              <h4 className="font-bold text-amber-900 text-sm">
-                Existem {unassignedOrders.length} pedido(s) sem montador atribuído ({unassignedQty} peças no total)
-              </h4>
-              <p className="text-xs text-amber-800 mt-0.5">
-                Para que as estatísticas do montador fiquem 100% precisas, atribua um responsável para cada ordem na lista abaixo.
-              </p>
+
+            {/* Quick Filter / Search within unassigned */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-bold text-amber-900">
+                Ação rápida:
+              </span>
+              <select
+                onChange={(e) => {
+                  if (e.target.value && unassignedOrders.length > 0) {
+                    const targetOp = operators.find((op) => op.id === e.target.value);
+                    if (targetOp && confirm(`Deseja atribuir todos os ${unassignedOrders.length} pedidos pendentes para ${targetOp.name}?`)) {
+                      setOrders((prev) =>
+                        prev.map((ord) => {
+                          if (!ord.assignedOperatorId) {
+                            return {
+                              ...ord,
+                              assignedOperatorId: targetOp.id,
+                              assignedOperatorName: targetOp.name,
+                              assignedOperatorCode: targetOp.code,
+                            };
+                          }
+                          return ord;
+                        })
+                      );
+                      setAssignmentToast(`Todos os ${unassignedOrders.length} pedidos foram atribuídos a ${targetOp.name}!`);
+                      setTimeout(() => setAssignmentToast(null), 3500);
+                    }
+                    e.target.value = '';
+                  }
+                }}
+                className="bg-white border border-amber-300 text-amber-900 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs hover:bg-amber-50/50 transition-all"
+              >
+                <option value="">Atribuir todos para...</option>
+                {operators.map((op) => (
+                  <option key={op.id} value={op.id}>
+                    {op.name} ({op.role})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="shrink-0 flex items-center gap-2">
-            <select
-              onChange={(e) => {
-                if (e.target.value && unassignedOrders[0]) {
-                  handleAssignOrderToOperator(unassignedOrders[0].id, e.target.value);
-                  e.target.value = '';
-                }
-              }}
-              className="bg-white border border-amber-300 text-amber-900 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
-            >
-              <option value="">Atribuir 1º pedido pendente...</option>
-              {operators.map((op) => (
-                <option key={op.id} value={op.id}>
-                  {op.name} ({op.role})
-                </option>
-              ))}
-            </select>
+          {/* Detailed interactive table of unassigned orders */}
+          <div className="overflow-hidden border border-amber-200/90 rounded-2xl bg-white shadow-2xs">
+            <div className="overflow-x-auto max-h-80 overflow-y-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-amber-100/70 sticky top-0 z-10 text-amber-950 font-black border-b border-amber-200">
+                  <tr>
+                    <th className="py-2.5 px-4 font-black uppercase text-[11px] tracking-wider">Nº Pedido / OP</th>
+                    <th className="py-2.5 px-4 font-black uppercase text-[11px] tracking-wider">Loja / Cliente</th>
+                    <th className="py-2.5 px-4 font-black uppercase text-[11px] tracking-wider">Descrição da Peça</th>
+                    <th className="py-2.5 px-4 font-black uppercase text-[11px] tracking-wider text-center">Quantidade</th>
+                    <th className="py-2.5 px-4 font-black uppercase text-[11px] tracking-wider text-center">Status</th>
+                    <th className="py-2.5 px-4 font-black uppercase text-[11px] tracking-wider text-right">Atribuir Montador</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100 font-medium text-slate-800">
+                  {unassignedOrders.map((ord) => (
+                    <tr
+                      key={ord.id}
+                      onClick={() => setSelectedUnassignedOrder(ord)}
+                      className="hover:bg-amber-50/80 transition-colors cursor-pointer group"
+                    >
+                      <td className="py-3 px-4">
+                        <span className="font-mono font-black text-amber-950 bg-amber-100/60 px-2 py-0.5 rounded-md border border-amber-200">
+                          {ord.orderId || ord.id}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-bold text-slate-900">
+                        {ord.store || 'Loja Não Informada'}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-semibold text-slate-950 group-hover:text-amber-900 transition-colors">
+                          {ord.itemDescription || 'Sem descrição'}
+                        </span>
+                        {ord.pendingReason && (
+                          <span className="block text-[10px] text-amber-700 font-medium">
+                            Motivo: {ord.pendingReason}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-900 font-black rounded-md font-mono text-xs border border-slate-200">
+                          {ord.quantity} {ord.quantity === 1 ? 'peça' : 'peças'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          ord.executionStatus === 'concluido'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : ord.executionStatus === 'parcial'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                          {ord.executionStatus === 'concluido' ? 'Concluído' : ord.executionStatus === 'parcial' ? 'Parcial' : 'Pendente'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleAssignOrderToOperator(ord.id, e.target.value);
+                                e.target.value = '';
+                              }
+                            }}
+                            className="bg-white border border-amber-300 hover:border-amber-400 text-amber-950 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                          >
+                            <option value="">Selecionar Montador...</option>
+                            {operators.map((op) => (
+                              <option key={op.id} value={op.id}>
+                                {op.name} ({op.role})
+                              </option>
+                            ))}
+                          </select>
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUnassignedOrder(ord)}
+                            className="p-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer"
+                            title="Atribuir montador a esta peça"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">edit</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="bg-amber-50/60 px-4 py-2 text-[11px] text-amber-900 border-t border-amber-100 flex items-center justify-between">
+              <span>💡 <strong>Dica:</strong> Toque ou clique em qualquer linha para abrir o painel de atribuição detalhada.</span>
+              <span className="font-bold">{unassignedOrders.length} pedido(s) aguardando montador</span>
+            </div>
           </div>
         </div>
       )}
@@ -2301,6 +2425,119 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Assigning Single Unassigned Order */}
+      {selectedUnassignedOrder && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                  <span className="material-symbols-outlined text-2xl">person_add</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Atribuir Montador ao Pedido</h3>
+                  <p className="text-xs text-slate-500">Selecione o operador responsável para sincronizar estatísticas</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedUnassignedOrder(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Order Summary Details Box */}
+            <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2.5 text-xs text-slate-800">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Nº Pedido / OP:</span>
+                <span className="font-mono font-black text-amber-950 text-sm bg-white px-2.5 py-0.5 rounded-md border border-amber-200">
+                  {selectedUnassignedOrder.orderId || selectedUnassignedOrder.id}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Loja / Cliente:</span>
+                <span className="font-bold text-slate-900">{selectedUnassignedOrder.store || 'Loja Não Informada'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Descrição da Peça:</span>
+                <span className="font-black text-slate-950 max-w-[260px] text-right truncate" title={selectedUnassignedOrder.itemDescription}>
+                  {selectedUnassignedOrder.itemDescription}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Quantidade Total:</span>
+                <span className="font-black text-slate-900 bg-white px-2 py-0.5 rounded-md border border-amber-200 font-mono">
+                  {selectedUnassignedOrder.quantity} {selectedUnassignedOrder.quantity === 1 ? 'peça' : 'peças'}
+                </span>
+              </div>
+              {selectedUnassignedOrder.pendingReason && (
+                <div className="pt-2 border-t border-amber-200/80 flex items-start justify-between">
+                  <span className="text-amber-800 font-medium">Motivo/Obs:</span>
+                  <span className="font-semibold text-amber-950 text-right">{selectedUnassignedOrder.pendingReason}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Operator Selection List */}
+            <div className="space-y-2">
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                Escolha o Montador Responsável:
+              </label>
+              <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                {operators.map((op) => {
+                  const m = getOperatorMetrics(op.id);
+                  return (
+                    <button
+                      key={op.id}
+                      type="button"
+                      onClick={() => {
+                        handleAssignOrderToOperator(selectedUnassignedOrder.id, op.id);
+                        setSelectedUnassignedOrder(null);
+                      }}
+                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/60 transition-all flex items-center justify-between text-left cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-slate-100 group-hover:bg-amber-500 group-hover:text-white text-slate-700 flex items-center justify-center font-bold text-xs transition-colors">
+                          {op.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-slate-900 group-hover:text-amber-950">
+                            {op.name}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {op.role} • {op.shift}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-mono font-bold text-slate-700 block">
+                          {m.totalDeliveredQty}/{m.totalAssignedQty} pcs
+                        </span>
+                        <span className="text-[10px] font-black text-emerald-600">
+                          {m.efficiencyIndex}% Efic.
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedUnassignedOrder(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
