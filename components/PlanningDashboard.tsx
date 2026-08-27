@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile } from '@/types/factory';
-import { INITIAL_OPERATORS } from '@/lib/factory-store';
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore, saveOrderToFirestore } from '@/lib/firestoreSync';
 import { normalizeDateToDDMMYYYY, isDateBefore, isOrderOverdueForCheckoff } from '@/lib/dateUtils';

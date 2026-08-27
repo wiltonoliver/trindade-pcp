@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ActiveTab, OrderItem, Store, UserProfile, AssemblyOperator, AppNotification, MaterialRequest } from '@/types/factory';
-import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_OPERATORS, INITIAL_MATERIAL_REQUESTS } from '@/lib/factory-store';
+import { INITIAL_ORDERS, INITIAL_STORES, INITIAL_MATERIAL_REQUESTS } from '@/lib/factory-store';
 import { sanitizeUnit } from '@/lib/utils';
 import { normalizeDateToDDMMYYYY, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
 import {
@@ -48,6 +48,7 @@ import {
   saveMaterialRequestToFirestore,
   deleteMaterialRequestFromFirestore,
   deleteNotificationFromFirestore,
+  isMockOperator,
 } from '@/lib/firestoreSync';
 
 export default function FactoryOpsApp() {
@@ -73,7 +74,7 @@ export default function FactoryOpsApp() {
   // Initialize orders state safely for SSR hydration match
   const [orders, setOrders] = useState<OrderItem[]>(INITIAL_ORDERS);
   const [stores, setStores] = useState<Store[]>(INITIAL_STORES);
-  const [operators, setOperators] = useState<AssemblyOperator[]>(INITIAL_OPERATORS);
+  const [operators, setOperators] = useState<AssemblyOperator[]>([]);
   const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>(INITIAL_MATERIAL_REQUESTS);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -150,23 +151,23 @@ export default function FactoryOpsApp() {
       if (savedOperators) {
         try {
           const parsedOps = JSON.parse(savedOperators);
-          const hasLegacyMock = Array.isArray(parsedOps) && parsedOps.some((op: AssemblyOperator) =>
-            ['op-101', 'op-102', 'op-103', 'op-104'].includes(op.id) ||
-            ['Roberto Souza', 'Marcos Paulo', 'Lucas Ferreira', 'Antonio Carlos'].includes(op.name)
-          );
-          if (hasLegacyMock) {
-            const cleaned = parsedOps.filter((op: AssemblyOperator) =>
-              !['op-101', 'op-102', 'op-103', 'op-104'].includes(op.id) &&
-              !['Roberto Souza', 'Marcos Paulo', 'Lucas Ferreira', 'Antonio Carlos'].includes(op.name)
+          if (Array.isArray(parsedOps)) {
+            const validRealOps = parsedOps.filter(
+              (op: AssemblyOperator) => op && op.id && !isMockOperator(op) && !deletedOpIds.includes(op.id)
             );
-            localStorage.setItem('factoryops_operators', JSON.stringify(cleaned));
-            setOperators(cleaned);
-          } else if (Array.isArray(parsedOps)) {
-            const filteredOps = parsedOps.filter((op: AssemblyOperator) => op.id && !deletedOpIds.includes(op.id));
-            setOperators(filteredOps);
+            localStorage.setItem('factoryops_operators', JSON.stringify(validRealOps));
+            setOperators(validRealOps);
+
+            // Sync any local real operators to Firestore so all devices (mobile, desktop) have them immediately
+            validRealOps.forEach((op) => {
+              saveOperatorToFirestore(op).catch(() => {});
+            });
+          } else {
+            setOperators([]);
           }
         } catch (e) {
           console.error('Error parsing saved operators from localStorage', e);
+          setOperators([]);
         }
       } else {
         setOperators([]);
@@ -250,7 +251,7 @@ export default function FactoryOpsApp() {
       const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_operator_ids') : null;
       const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
       if (remoteOps) {
-        const filtered = remoteOps.filter((op) => op.id && !deletedIds.includes(op.id));
+        const filtered = remoteOps.filter((op) => op.id && !isMockOperator(op) && !deletedIds.includes(op.id));
         setOperators(filtered);
         if (typeof window !== 'undefined') {
           localStorage.setItem('factoryops_operators', JSON.stringify(filtered));

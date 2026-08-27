@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { OrderItem, AssemblyOperator, ExecutionStatus } from '@/types/factory';
-import { INITIAL_OPERATORS } from '@/lib/factory-store';
 
 // Helper Speedometer Gauge Chart for Excel Dashboard
 const SpeedometerGauge: React.FC<{ percentage: number }> = ({ percentage }) => {
