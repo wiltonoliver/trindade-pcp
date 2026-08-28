@@ -36,6 +36,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const [selectedPeriod, setSelectedPeriod] = useState<'mes' | 'semana'>('mes');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list');
   const [currentPage, setCurrentPage] = useState<number>(1); // 1, 2, or 3 (3 screens = 15 business days)
+  const [mobileDayFilter, setMobileDayFilter] = useState<string>('all'); // 'all' or column id
   const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<OrderItem | null>(null);
@@ -606,47 +607,93 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
 
       {/* View Mode Switching: Kanban vs List View */}
       {viewMode === 'kanban' ? (
-        /* Kanban Board */
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[520px]">
-          {columnsConfig.map((col) => {
-            const colOrders = getOrdersByColumn(col);
-            return (
-              <div
-                key={col.id}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, col.id)}
-                className="flex flex-col gap-3 min-w-0"
-              >
-                {/* Column Header */}
-                <div className="flex items-center justify-between px-1">
-                  <div className="flex items-center gap-1.5 overflow-hidden">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dotColor}`} />
-                    <h3
-                      suppressHydrationWarning
-                      className="font-bold text-[11px] text-slate-700 uppercase tracking-tight truncate"
-                      title={col.title}
-                    >
-                      {col.title}
-                    </h3>
-                    <span
-                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${col.badgeBg} ${col.badgeText}`}
-                    >
-                      {colOrders.length < 10 ? `0${colOrders.length}` : colOrders.length}
+        <div className="space-y-4">
+          {/* Mobile Day Selector Bar (Visible only on mobile devices to easily access any day's cards) */}
+          <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setMobileDayFilter('all')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                mobileDayFilter === 'all'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 bg-white/70'
+              }`}
+            >
+              Todos (5 Dias)
+            </button>
+            {columnsConfig.map((col, idx) => {
+              const count = getOrdersByColumn(col).length;
+              const isSelected = mobileDayFilter === col.id;
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  onClick={() => setMobileDayFilter(col.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 bg-white/70'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : col.dotColor}`} />
+                  <span>{col.title.split(' ')[0]} {col.defaultDateStr.substring(0, 5)}</span>
+                  {count > 0 && (
+                    <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-black ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {count}
                     </span>
-                  </div>
-                  {!isReadOnly && (
-                    <button
-                      onClick={() => {
-                        setNewColumn(col.id);
-                        setIsAddModalOpen(true);
-                      }}
-                      className="material-symbols-outlined text-slate-300 hover:text-blue-600 transition-colors text-[18px] cursor-pointer shrink-0"
-                      title="Adicionar à coluna"
-                    >
-                      add_circle
-                    </button>
                   )}
-                </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Kanban Board Container: Swipeable carousel on mobile + 5 columns grid on desktop */}
+          <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-4 min-h-[520px] overflow-x-auto pb-4 pt-1 snap-x snap-mandatory">
+            {columnsConfig.map((col) => {
+              const colOrders = getOrdersByColumn(col);
+              const isHiddenOnMobile = mobileDayFilter !== 'all' && mobileDayFilter !== col.id;
+
+              return (
+                <div
+                  key={col.id}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, col.id)}
+                  className={`flex-col gap-3 min-w-[280px] sm:min-w-[300px] md:min-w-0 flex-1 shrink-0 md:shrink snap-start ${
+                    isHiddenOnMobile ? 'hidden md:flex' : 'flex'
+                  }`}
+                >
+                  {/* Column Header */}
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-1.5 overflow-hidden">
+                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${col.dotColor}`} />
+                      <h3
+                        suppressHydrationWarning
+                        className="font-bold text-[11px] text-slate-700 uppercase tracking-tight truncate"
+                        title={col.title}
+                      >
+                        {col.title}
+                      </h3>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${col.badgeBg} ${col.badgeText}`}
+                      >
+                        {colOrders.length < 10 ? `0${colOrders.length}` : colOrders.length}
+                      </span>
+                    </div>
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => {
+                          setNewColumn(col.id);
+                          setIsAddModalOpen(true);
+                        }}
+                        className="material-symbols-outlined text-slate-300 hover:text-blue-600 transition-colors text-[18px] cursor-pointer shrink-0"
+                        title="Adicionar à coluna"
+                      >
+                        add_circle
+                      </button>
+                    )}
+                  </div>
 
                 {/* Kanban Droppable Column Container */}
                 <div
@@ -828,6 +875,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
               </div>
             );
           })}
+          </div>
         </div>
       ) : (
         /* List View (Detailed tables for each schedule section) */
