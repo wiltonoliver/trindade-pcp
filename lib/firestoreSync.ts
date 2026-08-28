@@ -43,6 +43,7 @@ export const subscribeStores = (onUpdate: (stores: Store[]) => void) => {
 };
 
 const MOCK_OP_IDS = ['op-101', 'op-102', 'op-103', 'op-104', 'op-1', 'op-2', 'op-3', 'op-4'];
+const MOCK_OP_CODES = ['OP-101', 'OP-102', 'OP-103', 'OP-104'];
 const MOCK_OP_NAMES = [
   'roberto souza',
   'marcos paulo',
@@ -53,9 +54,11 @@ const MOCK_OP_NAMES = [
 export const isMockOperator = (op: Partial<AssemblyOperator>): boolean => {
   if (!op) return true;
   const id = (op.id || '').toLowerCase().trim();
+  const code = (op.code || '').toUpperCase().trim();
   const name = (op.name || '').toLowerCase().trim();
   if (MOCK_OP_IDS.includes(id)) return true;
-  return MOCK_OP_NAMES.some((m) => name === m || name.startsWith(m));
+  if (MOCK_OP_CODES.includes(code)) return true;
+  return MOCK_OP_NAMES.some((m) => name.includes(m));
 };
 
 /**
@@ -68,10 +71,13 @@ export const subscribeOperators = (onUpdate: (operators: AssemblyOperator[]) => 
     (snapshot) => {
       const list: AssemblyOperator[] = [];
       snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as AssemblyOperator;
+        const data = { ...docSnap.data(), id: docSnap.id } as AssemblyOperator;
         // Filter out old legacy mock operators if any remain in remote
         if (data && !isMockOperator(data)) {
           list.push(data);
+        } else if (data && isMockOperator(data)) {
+          // Permanently purge any residual mock operator from Firestore
+          deleteDoc(doc(db, 'operators', docSnap.id)).catch(() => {});
         }
       });
       onUpdate(list);

@@ -49,7 +49,7 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
 
   // Filter orders that are overdue for check-off
   const overdueOrders = useMemo(() => {
-    return orders.filter((ord) => isOrderOverdueForCheckoff(ord.productionDate, ord.executionStatus, ord.progress, todayStr));
+    return orders.filter((ord) => isOrderOverdueForCheckoff(ord.productionDate, ord.executionStatus, ord.progress, todayStr, ord.isClosedUncompleted));
   }, [orders, todayStr]);
 
   // Unique past dates present in overdue list

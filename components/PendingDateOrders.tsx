@@ -87,7 +87,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
   // Filter active orders that are waiting for a date
   const pendingDateOrders = useMemo(() => {
     return orders.filter((ord) => {
-      if (ord.executionStatus === 'concluido' || ord.progress === 100) return false;
+      if (ord.executionStatus === 'concluido' || ord.progress === 100 || ord.isClosedUncompleted) return false;
       return ord.column === 'nao_planejado' || !ord.productionDate || ord.productionDate.toLowerCase().includes('aguardando');
     });
   }, [orders]);

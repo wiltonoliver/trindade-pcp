@@ -53,7 +53,7 @@ export interface OrderStatusHistoryLog {
   reason?: string;
   note?: string;
   previousDate?: string;
-  actionType?: 'status_update' | 'reschedule' | 'return_to_pending';
+  actionType?: 'status_update' | 'reschedule' | 'return_to_pending' | 'close_uncompleted';
   cleanlinessScore?: number; // 1 to 5
   organizationScore?: number; // 1 to 5
   disciplineScore?: number; // 1 to 5
@@ -87,6 +87,9 @@ export interface OrderItem {
   urgencyRequest?: UrgencyRequest;
   imageUrl?: string;
   images?: string[];
+  isClosedUncompleted?: boolean;
+  closedAt?: string;
+  closedBy?: string;
 }
 
 export interface ProblemHistoryItem {

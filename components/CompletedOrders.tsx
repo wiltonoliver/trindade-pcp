@@ -23,6 +23,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   const [localSearch, setLocalSearch] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('ALL');
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'concluido' | 'encerrado'>('ALL');
   const [selectedOrderIdsForBatch, setSelectedOrderIdsForBatch] = useState<string[]>([]);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
   const [batchModalItems, setBatchModalItems] = useState<OrderItem[]>([]);
@@ -33,15 +34,23 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   const [remakeNote, setRemakeNote] = useState('');
   const [orderToDelete, setOrderToDelete] = useState<OrderItem | null>(null);
 
-  // Filter completed orders (executionStatus === 'concluido' or progress === 100)
+  // Filter completed orders (executionStatus === 'concluido', progress === 100, or closed as uncompleted)
   const completedOrders = useMemo(() => {
     return orders.filter(
-      (ord) => ord.executionStatus === 'concluido' || ord.progress === 100
+      (ord) => ord.executionStatus === 'concluido' || ord.progress === 100 || ord.isClosedUncompleted
     );
   }, [orders]);
 
   // Helper to format completion date from history
   const getCompletionDate = (ord: OrderItem) => {
+    if (ord.isClosedUncompleted) {
+      if (ord.closedAt) return ord.closedAt;
+      const closedLog = ord.statusHistory?.find(
+        (h) => h.status === 'encerrado_nao_produzido' || h.note?.includes('NÃO CONCLUÍDO (Encerrado')
+      );
+      if (closedLog && closedLog.timestamp) return closedLog.timestamp;
+      return 'Encerrado (Não Concluído)';
+    }
     const log = ord.statusHistory?.find((h) => h.status === 'concluido');
     if (log && log.timestamp) return log.timestamp;
     if (ord.productionDate && ord.productionDate !== 'Aguardando Data') return ord.productionDate;
@@ -50,7 +59,13 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
   // Helper to extract clean DD/MM/YYYY date
   const getCleanDateOnly = (ord: OrderItem) => {
-    const log = ord.statusHistory?.find((h) => h.status === 'concluido');
+    if (ord.closedAt) {
+      const match = ord.closedAt.match(/\d{2}\/\d{2}\/\d{4}/);
+      if (match) return match[0];
+    }
+    const log = ord.statusHistory?.find(
+      (h) => h.status === 'concluido' || h.status === 'encerrado_nao_produzido'
+    );
     if (log && log.timestamp) {
       const match = log.timestamp.match(/\d{2}\/\d{2}\/\d{4}/);
       if (match) return match[0];
@@ -84,6 +99,14 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   const filteredCompletedOrders = useMemo(() => {
     const query = (localSearch || externalSearchQuery).toLowerCase().trim();
     return completedOrders.filter((ord) => {
+      // Status filter
+      if (selectedStatusFilter === 'concluido' && ord.isClosedUncompleted) {
+        return false;
+      }
+      if (selectedStatusFilter === 'encerrado' && !ord.isClosedUncompleted) {
+        return false;
+      }
+
       // Store filter
       if (selectedStore !== 'ALL' && ord.store !== selectedStore) {
         return false;
@@ -112,7 +135,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
       return true;
     });
-  }, [completedOrders, localSearch, externalSearchQuery, selectedStore, selectedDateFilter, todayStr]);
+  }, [completedOrders, localSearch, externalSearchQuery, selectedStatusFilter, selectedStore, selectedDateFilter, todayStr]);
 
   // Checkbox Selection Logic
   const handleToggleSelectOrder = (id: string) => {
@@ -175,6 +198,9 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
       executionStatus: 'pendente',
       progress: 0,
       column: 'hoje',
+      isClosedUncompleted: false,
+      closedAt: undefined,
+      closedBy: undefined,
       statusHistory: [...(orderToRemake.statusHistory || []), remakeLog],
     };
 
@@ -233,9 +259,11 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
           <div>
             <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Total Finalizados</p>
             <p className="text-2xl font-black text-slate-900 mt-1">{completedOrders.length}</p>
-            <p className="text-[11px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">check_circle</span>
-              <span>100% Produzidos</span>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+              <span className="text-emerald-700 font-bold">{completedOrders.filter((o) => !o.isClosedUncompleted).length} concluídos</span>
+              {completedOrders.some((o) => o.isClosedUncompleted) && (
+                <span>• <strong className="text-rose-600 font-bold">{completedOrders.filter((o) => o.isClosedUncompleted).length} encerrados</strong></span>
+              )}
             </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -331,6 +359,20 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                 </option>
               );
             })}
+          </select>
+        </div>
+
+        {/* Status selector */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-bold text-slate-500 whitespace-nowrap hidden sm:inline">Status:</span>
+          <select
+            value={selectedStatusFilter}
+            onChange={(e) => setSelectedStatusFilter(e.target.value as 'ALL' | 'concluido' | 'encerrado')}
+            className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+          >
+            <option value="ALL">Todos os Status ({completedOrders.length})</option>
+            <option value="concluido">100% Concluídos ({completedOrders.filter((o) => !o.isClosedUncompleted).length})</option>
+            <option value="encerrado">Encerrados (Não Concluídos) ({completedOrders.filter((o) => o.isClosedUncompleted).length})</option>
           </select>
         </div>
       </div>
@@ -546,10 +588,20 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
                       {/* Status & Urgência */}
                       <td className="py-2.5 px-2 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                          <span className="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>
-                          <span>100%</span>
-                        </span>
+                        {ord.isClosedUncompleted ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold"
+                            title={ord.delayReason || ord.pendingReason ? `Motivo: ${ord.delayReason || ord.pendingReason}` : 'Encerrado sem necessidade de fabricação'}
+                          >
+                            <span className="material-symbols-outlined text-[12px] text-rose-600">cancel</span>
+                            <span>Encerrado</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                            <span className="material-symbols-outlined text-[12px] text-emerald-600">check_circle</span>
+                            <span>100%</span>
+                          </span>
+                        )}
                       </td>
 
                       {/* Actions */}

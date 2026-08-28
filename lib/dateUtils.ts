@@ -107,9 +107,10 @@ export const isOrderOverdueForCheckoff = (
   productionDate?: string | null,
   executionStatus?: string,
   progress: number = 0,
-  todayDateStr: string = getLocalDateFormatted()
+  todayDateStr: string = getLocalDateFormatted(),
+  isClosedUncompleted?: boolean
 ): boolean => {
-  if (executionStatus === 'concluido' || progress >= 100) return false;
+  if (executionStatus === 'concluido' || progress >= 100 || isClosedUncompleted) return false;
   if (!productionDate || productionDate.toLowerCase().includes('aguardando')) return false;
   const norm = normalizeDateToDDMMYYYY(productionDate);
   return isDateBefore(norm, todayDateStr);

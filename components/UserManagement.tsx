@@ -209,8 +209,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
   // Form fields for Operator Modal
   const [opCode, setOpCode] = useState('');
   const [opName, setOpName] = useState('');
-  const [opRole, setOpRole] = useState('Montador Especialista de Esquadrias');
-  const [opSpecialty, setOpSpecialty] = useState('Esquadrias de Alumínio & Linha Gold');
+  const [opRole, setOpRole] = useState('Montador');
+  const [opSpecialty, setOpSpecialty] = useState('Montador');
   const [opShift, setOpShift] = useState('1º Turno (07:00 - 17:00)');
   const [opPlant, setOpPlant] = useState('Planta A - Matriz');
   const [opPhone, setOpPhone] = useState('');
@@ -218,10 +218,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({
 
   const openNewOperatorModal = () => {
     setEditingOperator(null);
-    setOpCode(`OP-${100 + operators.length + 1}`);
+    setOpCode(`OP-${String(operators.length + 1).padStart(2, '0')}`);
     setOpName('');
-    setOpRole('Montador Especialista de Esquadrias');
-    setOpSpecialty('Esquadrias de Alumínio & Linha Gold');
+    setOpRole('Montador');
+    setOpSpecialty('Montador');
     setOpShift('1º Turno (07:00 - 17:00)');
     setOpPlant('Planta A - Matriz');
     setOpPhone('');
@@ -234,7 +234,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     setOpCode(op.code);
     setOpName(op.name);
     setOpRole(op.role);
-    setOpSpecialty(op.specialty);
+    const validSpecialties = ['Serralheiro', 'Operador de Usinagem', 'Montador'];
+    setOpSpecialty(validSpecialties.includes(op.specialty) ? op.specialty : 'Montador');
     setOpShift(op.shift || '1º Turno (07:00 - 17:00)');
     setOpPlant(op.plant || 'Planta A - Matriz');
     setOpPhone(op.phone || '');
@@ -266,7 +267,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
     } else {
       const newOp: AssemblyOperator = {
         id: `op-${Date.now()}`,
-        code: opCode || `OP-${100 + operators.length + 1}`,
+        code: opCode || `OP-${String(operators.length + 1).padStart(2, '0')}`,
         name: opName.trim(),
         role: opRole,
         specialty: opSpecialty,
@@ -1466,7 +1467,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                 type="text"
                 value={operatorSearch}
                 onChange={(e) => setOperatorSearch(e.target.value)}
-                placeholder="Buscar por nome, código (OP-101) ou especialidade..."
+                placeholder="Buscar por nome, código (OP-01) ou especialidade..."
                 className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
               />
             </div>
@@ -1478,11 +1479,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                 onChange={(e) => setOperatorSpecialtyFilter(e.target.value)}
                 className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
-                <option value="all">Todas Especialidades</option>
-                <option value="Alumínio">Linha Alumínio & Gold</option>
-                <option value="Integradas">Portas Integradas</option>
-                <option value="Vidro">Vidro & Sacadas</option>
-                <option value="Fachada">Fachada Structural Glazing</option>
+                <option value="all">Todas as Funções</option>
+                <option value="Serralheiro">Serralheiro</option>
+                <option value="Operador de Usinagem">Operador de Usinagem</option>
+                <option value="Montador">Montador</option>
               </select>
 
               <select
@@ -1544,10 +1544,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                       </span>
                     </div>
 
-                    {/* Specialty pill */}
+                    {/* Function pill */}
                     <div className="bg-blue-50/80 border border-blue-100 p-2.5 rounded-xl space-y-1">
                       <span className="text-[10px] uppercase font-bold text-blue-600 tracking-wider block">
-                        Especialidade Principal
+                        Função
                       </span>
                       <p className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-[15px] text-blue-600">verified</span>
@@ -1679,72 +1679,34 @@ export const UserManagement: React.FC<UserManagementProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Cargo / Função</label>
-                  <input
-                    type="text"
-                    required
-                    value={opRole}
-                    onChange={(e) => setOpRole(e.target.value)}
-                    placeholder="Ex: Montador Especialista"
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Telefone / WhatsApp</label>
-                  <input
-                    type="text"
-                    value={opPhone}
-                    onChange={(e) => setOpPhone(e.target.value)}
-                    placeholder="Ex: (11) 98765-4321"
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Especialidade Principal</label>
+                <label id="label-operator-function" className="block text-xs font-bold text-slate-700 mb-1">Função</label>
                 <select
+                  id="select-operator-function"
                   value={opSpecialty}
-                  onChange={(e) => setOpSpecialty(e.target.value)}
+                  onChange={(e) => {
+                    setOpSpecialty(e.target.value);
+                    setOpRole(e.target.value);
+                  }}
                   className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500 font-semibold text-slate-800"
                 >
-                  <option value="Esquadrias de Alumínio & Linha Gold">Esquadrias de Alumínio & Linha Gold</option>
-                  <option value="Portas Integradas & Automação">Portas Integradas & Automação</option>
-                  <option value="Vidro Temperado & Sacadas">Vidro Temperado & Sacadas</option>
-                  <option value="Fachada Structural Glazing / Pele de Vidro">Fachada Structural Glazing / Pele de Vidro</option>
-                  <option value="Corte, Usinagem & Pré-Montagem">Corte, Usinagem & Pré-Montagem</option>
+                  <option value="Serralheiro">Serralheiro</option>
+                  <option value="Operador de Usinagem">Operador de Usinagem</option>
+                  <option value="Montador">Montador</option>
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Turno de Trabalho</label>
-                  <select
-                    value={opShift}
-                    onChange={(e) => setOpShift(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="1º Turno (07:00 - 17:00)">1º Turno (07:00 - 17:00)</option>
-                    <option value="2º Turno (17:00 - 02:00)">2º Turno (17:00 - 02:00)</option>
-                    <option value="Horário Comercial (08:00 - 18:00)">Horário Comercial (08:00 - 18:00)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Setor / Planta</label>
-                  <select
-                    value={opPlant}
-                    onChange={(e) => setOpPlant(e.target.value)}
-                    className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="Planta A - Matriz">Planta A - Matriz</option>
-                    <option value="Setor de Alumínio & Corte">Setor de Alumínio & Corte</option>
-                    <option value="Setor de Vidros & Linha Integrada">Setor de Vidros & Linha Integrada</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Turno de Trabalho</label>
+                <select
+                  value={opShift}
+                  onChange={(e) => setOpShift(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="1º Turno (07:00 - 17:00)">1º Turno (07:00 - 17:00)</option>
+                  <option value="2º Turno (17:00 - 02:00)">2º Turno (17:00 - 02:00)</option>
+                  <option value="Horário Comercial (08:00 - 18:00)">Horário Comercial (08:00 - 18:00)</option>
+                </select>
               </div>
 
               <div className="pt-3 flex gap-3 border-t border-slate-100">

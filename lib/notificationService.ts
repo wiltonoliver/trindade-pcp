@@ -241,6 +241,26 @@ export const notifyOrderNotCompletedDeleted = (
 };
 
 /**
+ * Notificação de Produção Encerrada como Não Concluído (Baixa sem necessidade de fabricação)
+ */
+export const notifyOrderClosedUncompleted = (
+  orderId: string,
+  storeName: string,
+  reason?: string,
+  actor?: string
+) => {
+  const reasonText = reason ? `. Motivo do encerramento: "${reason}"` : '';
+  return emitNotification({
+    title: `⏹️ Produção Encerrada - Não Concluído (OP #${orderId.replace(/^#/, '')})`,
+    message: `A OP #${orderId.replace(/^#/, '')} (${storeName}) teve sua produção encerrada pelo gestor (baixa efetuada como não concluído)${actor ? ` por ${actor}` : ''}${reasonText}.`,
+    type: 'order_not_completed_deleted',
+    orderId: orderId.replace(/^#/, ''),
+    storeName,
+    actor,
+  });
+};
+
+/**
  * Notificação de Pedido Excluído do Sistema
  */
 export const notifyOrderDeleted = (

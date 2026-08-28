@@ -152,9 +152,9 @@ export default function FactoryOpsApp() {
         try {
           const parsedOps = JSON.parse(savedOperators);
           if (Array.isArray(parsedOps)) {
-            const validRealOps = parsedOps.filter(
-              (op: AssemblyOperator) => op && op.id && !isMockOperator(op) && !deletedOpIds.includes(op.id)
-            );
+            const validRealOps = parsedOps
+              .filter((op: AssemblyOperator) => op && op.id && !isMockOperator(op) && !deletedOpIds.includes(op.id))
+              .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }));
             localStorage.setItem('factoryops_operators', JSON.stringify(validRealOps));
             setOperators(validRealOps);
 
@@ -251,7 +251,9 @@ export default function FactoryOpsApp() {
       const deletedIdsStr = typeof window !== 'undefined' ? localStorage.getItem('trindade_deleted_operator_ids') : null;
       const deletedIds: string[] = deletedIdsStr ? JSON.parse(deletedIdsStr) : [];
       if (remoteOps) {
-        const filtered = remoteOps.filter((op) => op.id && !isMockOperator(op) && !deletedIds.includes(op.id));
+        const filtered = remoteOps
+          .filter((op) => op.id && !isMockOperator(op) && !deletedIds.includes(op.id))
+          .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }));
         setOperators(filtered);
         if (typeof window !== 'undefined') {
           localStorage.setItem('factoryops_operators', JSON.stringify(filtered));
@@ -549,15 +551,16 @@ export default function FactoryOpsApp() {
     }
   };
 
-  const completedCount = orders.filter((o) => o.executionStatus === 'concluido' || o.progress === 100).length;
+  const completedCount = orders.filter((o) => o.executionStatus === 'concluido' || o.progress === 100 || o.isClosedUncompleted).length;
   const pendingDateCount = orders.filter(
     (o) =>
       o.executionStatus !== 'concluido' &&
+      !o.isClosedUncompleted &&
       o.progress !== 100 &&
       (o.column === 'nao_planejado' || !o.productionDate || o.productionDate.toLowerCase().includes('aguardando'))
   ).length;
   const pendingCheckoutsCount = orders.filter((o) =>
-    isOrderOverdueForCheckoff(o.productionDate, o.executionStatus, o.progress)
+    isOrderOverdueForCheckoff(o.productionDate, o.executionStatus, o.progress, undefined, o.isClosedUncompleted)
   ).length;
   const pendingRawMaterialsCount = materialRequests.filter((m) => m.status === 'pendente').length;
 

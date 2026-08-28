@@ -43,9 +43,10 @@ export const ReplanningHistory: React.FC<ReplanningHistoryProps> = ({
   const pendingItems = useMemo(() => {
     return orders.filter(
       (o) =>
-        o.isPendingReposition ||
-        o.executionStatus === 'nao_produzido' ||
-        (!o.productionDate && o.column === 'nao_planejado' && Boolean(o.delayReason || o.pendingReason))
+        !o.isClosedUncompleted &&
+        (o.isPendingReposition ||
+          o.executionStatus === 'nao_produzido' ||
+          (!o.productionDate && o.column === 'nao_planejado' && Boolean(o.delayReason || o.pendingReason)))
     );
   }, [orders]);
 

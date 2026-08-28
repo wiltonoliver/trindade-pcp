@@ -12,6 +12,7 @@ import {
   notifyUrgencyRejected,
   notifyOrderCompleted,
   notifyOrderNotCompletedPendingDate,
+  notifyOrderClosedUncompleted,
 } from '@/lib/notificationService';
 
 interface OrderStatusModalProps {
@@ -49,7 +50,10 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   );
   const [selectedReason, setSelectedReason] = useState<string>(order?.delayReason || order?.pendingReason || '');
   const [customNote, setCustomNote] = useState<string>('');
-  const [returnToPendingDate, setReturnToPendingDate] = useState<boolean>(!order?.productionDate);
+  const [notCompletedAction, setNotCompletedAction] = useState<'pending_date' | 'close_uncompleted'>(() => {
+    if (order?.isClosedUncompleted) return 'close_uncompleted';
+    return 'pending_date';
+  });
 
   // 5S Operational Evaluation State (1 to 5)
   const [cleanlinessScore, setCleanlinessScore] = useState<number>(order?.cleanlinessScore || 5);
@@ -100,7 +104,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     setSelectedStatus(order.executionStatus || (order.progress === 100 ? 'concluido' : 'nao_produzido'));
     setSelectedReason(order.delayReason || order.pendingReason || '');
     setCustomNote('');
-    setReturnToPendingDate(!order.productionDate);
+    setNotCompletedAction(order.isClosedUncompleted ? 'close_uncompleted' : 'pending_date');
     setCleanlinessScore(order.cleanlinessScore || 5);
     setOrganizationScore(order.organizationScore || 5);
     setDisciplineScore(order.disciplineScore || 5);
@@ -331,6 +335,36 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
           organizationScore: log.organizationScore,
           disciplineScore: log.disciplineScore,
           note: note || undefined,
+        });
+        continue;
+      }
+
+      // 2.2 Status: Baixa como Não Concluído (Produção Encerrada)
+      const isClosedUncompletedLog =
+        status === 'encerrado_nao_produzido' ||
+        actionType === 'close_uncompleted' ||
+        note.toLowerCase().includes('baixa efetuada como não concluído') ||
+        note.toLowerCase().includes('encerrado como não concluído') ||
+        note.toLowerCase().includes('não precisa mais fazer') ||
+        note.toLowerCase().includes('não concluído (encerrado');
+
+      if (isClosedUncompletedLog) {
+        actions.push({
+          id: log.id || `close-${idx}`,
+          type: 'producao_nao_concluida',
+          title: 'Produção Encerrada (Baixa como Não Concluído)',
+          badgeLabel: 'Baixa: Encerrado (Não Concluído)',
+          badgeColorClass: 'bg-rose-50 text-rose-800 border-rose-300',
+          icon: 'cancel',
+          iconBgClass: 'bg-rose-100 text-rose-700',
+          author,
+          timestamp: displayTime,
+          timestampEpoch: logEpoch,
+          reason: reason || 'Produção cancelada/encerrada pela gestão',
+          cleanlinessScore: log.cleanlinessScore,
+          organizationScore: log.organizationScore,
+          disciplineScore: log.disciplineScore,
+          note: note || 'Produção encerrada em definitivo (não precisa mais fazer). Pedido arquivado nos finalizados.',
         });
         continue;
       }
@@ -690,9 +724,11 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   };
 
   const handleStatusChange = (status: ExecutionStatus | 'retornado_aguardando') => {
-    setSelectedStatus(status);
     if (status === 'retornado_aguardando') {
-      setReturnToPendingDate(true);
+      setSelectedStatus('nao_produzido');
+      setNotCompletedAction('pending_date');
+    } else {
+      setSelectedStatus(status);
     }
   };
 
@@ -933,30 +969,61 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       return;
     }
 
-    // 3. Status Não Concluído / Retornado para Aguardando Data
-    let finalStatus: ExecutionStatus = 'nao_produzido';
-    let finalProgress = order.progress === 100 ? 0 : order.progress;
-    let finalColumn = order.column;
-    let finalProdDate = order.productionDate;
-    let finalPendingReposition = order.isPendingReposition || false;
-    let actionType: 'status_update' | 'reschedule' | 'return_to_pending' = 'status_update';
+    // 3. Status Não Concluído / Retornado para Aguardando Data / Baixa (Encerrado)
+    if (notCompletedAction === 'close_uncompleted') {
+      const closeLog: OrderStatusHistoryLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: nowStr,
+        author: authorName,
+        status: 'encerrado_nao_produzido',
+        reason: effectiveReason,
+        note: combinedNote || `NÃO CONCLUÍDO (Encerrado pelo gestor: não precisa mais fazer). Motivo: ${effectiveReason}`,
+        previousDate: order.productionDate || 'Aguardando Data',
+        actionType: 'close_uncompleted',
+        cleanlinessScore,
+        organizationScore,
+        disciplineScore,
+      };
 
-    if (returnToPendingDate || selectedStatus === 'retornado_aguardando') {
-      finalColumn = 'nao_planejado';
-      finalProdDate = '';
-      finalPendingReposition = true;
-      actionType = 'return_to_pending';
+      const updatedOrder: OrderItem = {
+        ...order,
+        itemDescription: editableItemDescription.trim() || order.itemDescription,
+        deliveryDate: editableDeliveryDate.trim(),
+        imageUrl: modalImage || undefined,
+        images: modalImage ? [modalImage] : undefined,
+        executionStatus: 'nao_produzido',
+        progress: 0,
+        column: 'nao_planejado',
+        productionDate: '',
+        isPendingReposition: false,
+        isClosedUncompleted: true,
+        closedAt: nowStr,
+        closedBy: authorName,
+        delayReason: effectiveReason,
+        pendingReason: effectiveReason,
+        statusHistory: [closeLog, ...(order.statusHistory || [])],
+        cleanlinessScore,
+        organizationScore,
+        disciplineScore,
+      };
+
+      onUpdateOrder(updatedOrder);
+      saveOrderToFirestore(updatedOrder);
+      notifyOrderClosedUncompleted(order.orderId, order.store, effectiveReason, authorName);
+      onClose();
+      return;
     }
 
-    const newLog: OrderStatusHistoryLog = {
+    // Caso padrão de Não Concluído: Retornado para a fila de Aguardando Data
+    const returnLog: OrderStatusHistoryLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: nowStr,
       author: authorName,
-      status: returnToPendingDate ? 'retornado_aguardando' : 'nao_produzido',
+      status: 'retornado_aguardando',
       reason: effectiveReason,
-      note: combinedNote || (returnToPendingDate ? `Retornado para Aguardando Data. Motivo: ${effectiveReason}` : `Não concluído. Motivo: ${effectiveReason}`),
+      note: combinedNote || `Retornado para Aguardando Data. Motivo: ${effectiveReason}`,
       previousDate: order.productionDate || 'Aguardando Data',
-      actionType: actionType,
+      actionType: 'return_to_pending',
       cleanlinessScore,
       organizationScore,
       disciplineScore,
@@ -968,14 +1035,17 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       deliveryDate: editableDeliveryDate.trim(),
       imageUrl: modalImage || undefined,
       images: modalImage ? [modalImage] : undefined,
-      executionStatus: finalStatus,
-      progress: finalProgress,
-      column: finalColumn,
-      productionDate: finalProdDate,
-      isPendingReposition: finalPendingReposition,
+      executionStatus: 'nao_produzido',
+      progress: 0,
+      column: 'nao_planejado',
+      productionDate: '',
+      isPendingReposition: true,
+      isClosedUncompleted: false,
+      closedAt: undefined,
+      closedBy: undefined,
       delayReason: effectiveReason,
       pendingReason: effectiveReason,
-      statusHistory: [newLog, ...(order.statusHistory || [])],
+      statusHistory: [returnLog, ...(order.statusHistory || [])],
       cleanlinessScore,
       organizationScore,
       disciplineScore,
@@ -983,11 +1053,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     onUpdateOrder(updatedOrder);
     saveOrderToFirestore(updatedOrder);
-
-    if (returnToPendingDate || selectedStatus === 'retornado_aguardando') {
-      notifyOrderNotCompletedPendingDate(order.orderId, order.store, effectiveReason, authorName);
-    }
-
+    notifyOrderNotCompletedPendingDate(order.orderId, order.store, effectiveReason, authorName);
     onClose();
   };
 
@@ -1001,11 +1067,17 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               <span className="material-symbols-outlined text-2xl">assignment_late</span>
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-black text-base text-white">OP #{order.orderId}</span>
                 <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] font-bold">
                   {order.store}
                 </span>
+                {order.isClosedUncompleted && (
+                  <span className="px-2 py-0.5 bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[10px] font-bold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs">cancel</span>
+                    Encerrado
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-300 font-medium truncate max-w-md">
                 {editableItemDescription || order.itemDescription}
@@ -1049,7 +1121,11 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
             </div>
             <div>
               <span className="text-[10px] font-bold text-slate-400 uppercase block">Progresso</span>
-              <span className="font-bold text-slate-900">{order.progress || 0}%</span>
+              {order.isClosedUncompleted ? (
+                <span className="font-bold text-rose-600 block truncate">Encerrado</span>
+              ) : (
+                <span className="font-bold text-slate-900">{order.progress || 0}%</span>
+              )}
             </div>
           </div>
 
@@ -1866,18 +1942,87 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                     />
                   </div>
 
-                  {/* Checkbox for date removal */}
-                  <div className="pt-2 border-t border-amber-200/80 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="chk-return-pending"
-                      checked={returnToPendingDate}
-                      onChange={(e) => setReturnToPendingDate(e.target.checked)}
-                      className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
-                    />
-                    <label htmlFor="chk-return-pending" className="text-xs font-bold text-slate-800 cursor-pointer">
-                      Retornar esta OP para a lista de &quot;Aguardando Data&quot; (limpar data programada)
+                  {/* Action Selection for Non-Completed */}
+                  <div className="pt-3 border-t border-amber-200/80 space-y-2.5">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Destino / Ação para esta OP:
                     </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {/* Opção 1: Retornar para Aguardando Data */}
+                      <button
+                        type="button"
+                        onClick={() => setNotCompletedAction('pending_date')}
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                          notCompletedAction === 'pending_date'
+                            ? 'bg-amber-100/80 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 shadow-xs font-medium'
+                            : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                            notCompletedAction === 'pending_date'
+                              ? 'bg-amber-700 text-white'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">pending_actions</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-slate-900">
+                            Retornar p/ Aguardando Data
+                          </div>
+                          <div className="text-[11px] text-slate-500 leading-tight">
+                            Limpa a data programada e envia para a fila de espera para ser replanejada.
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Opção 2: Dar baixa como não concluído (Encerrar) */}
+                      <button
+                        type="button"
+                        onClick={() => setNotCompletedAction('close_uncompleted')}
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                          notCompletedAction === 'close_uncompleted'
+                            ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20 text-rose-950 shadow-xs font-medium'
+                            : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-700'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                            notCompletedAction === 'close_uncompleted'
+                              ? 'bg-rose-600 text-white'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">cancel</span>
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-rose-900 flex items-center gap-1">
+                            <span>Dar Baixa como Não Concluído</span>
+                            <span className="px-1.5 py-0.2 bg-rose-200 text-rose-800 rounded text-[9px] font-black uppercase">
+                              Encerrar
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500 leading-tight">
+                            Dá baixa definitiva. A produção é encerrada (não precisa mais fazer) e arquivada em Pedidos Finalizados.
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+
+                    {/* Informative banner when close_uncompleted is selected */}
+                    {notCompletedAction === 'close_uncompleted' && (
+                      <div className="p-3 bg-rose-100/70 border border-rose-200 rounded-xl text-xs text-rose-950 flex items-start gap-2 animate-fadeIn">
+                        <span className="material-symbols-outlined text-base text-rose-600 shrink-0 mt-0.5">info</span>
+                        <div>
+                          <p className="font-bold text-rose-950">Atenção: A OP será encerrada</p>
+                          <p className="text-[11px] text-rose-900 mt-0.5">
+                            Esta OP não constará mais nas listas de produção ativa nem gerará pendências de baixa. Ficará arquivada na aba &quot;Pedidos Finalizados&quot; como <strong>Encerrada</strong> com o motivo registrado para consulta e auditoria.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -2077,10 +2222,20 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                 <button
                   type="button"
                   onClick={handleSave}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                  className={`px-6 py-2.5 font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2 ${
+                    selectedStatus === 'nao_produzido' && notCompletedAction === 'close_uncompleted'
+                      ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white'
+                  }`}
                 >
-                  <span className="material-symbols-outlined text-[18px]">save</span>
-                  <span>Salvar &amp; Atualizar Pedido</span>
+                  <span className="material-symbols-outlined text-[18px]">
+                    {selectedStatus === 'nao_produzido' && notCompletedAction === 'close_uncompleted' ? 'cancel' : 'save'}
+                  </span>
+                  <span>
+                    {selectedStatus === 'nao_produzido' && notCompletedAction === 'close_uncompleted'
+                      ? 'Dar Baixa & Encerrar OP'
+                      : 'Salvar & Atualizar Pedido'}
+                  </span>
                 </button>
               </>
             )}

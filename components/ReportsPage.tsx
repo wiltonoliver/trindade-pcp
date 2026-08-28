@@ -5,6 +5,7 @@ import { OrderItem, Store, AssemblyOperator, UserProfile } from '@/types/factory
 import { TrindadeLogo } from './TrindadeLogo';
 import { OrderStatusModal } from './OrderStatusModal';
 import { sanitizeUnit } from '@/lib/utils';
+import { isMockOperator } from '@/lib/firestoreSync';
 
 interface ReportsPageProps {
   orders: OrderItem[];
@@ -85,6 +86,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     return dateStr;
   };
 
+  // Filter out any mock operators and sort predictably by code (OP-01, OP-02...)
+  const cleanOperators = useMemo(() => {
+    return (operators || [])
+      .filter((op) => op && op.id && !isMockOperator(op))
+      .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }));
+  }, [operators]);
+
   // Filter logic
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
@@ -92,7 +100,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       if (reportType === 'operator' && selectedOperatorId !== 'all') {
         if (order.assignedOperatorId !== selectedOperatorId) {
           // Check fallback match by code or name if assignedOperatorId isn't matching directly
-          const matchedOp = operators.find((op) => op.id === selectedOperatorId);
+          const matchedOp = cleanOperators.find((op) => op.id === selectedOperatorId);
           if (matchedOp) {
             const matchesCode = order.assignedOperatorCode && order.assignedOperatorCode === matchedOp.code;
             const matchesName = order.assignedOperatorName && order.assignedOperatorName.toLowerCase().includes(matchedOp.name.toLowerCase());
@@ -140,7 +148,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
       return true;
     });
-  }, [orders, reportType, selectedOperatorId, selectedStore, dateMode, singleDate, startDate, endDate, statusFilter, searchQuery, operators]);
+  }, [orders, reportType, selectedOperatorId, selectedStore, dateMode, singleDate, startDate, endDate, statusFilter, searchQuery, cleanOperators]);
 
   // Statistics
   const totalItems = filteredOrders.reduce((sum, o) => sum + (o.quantity || 1), 0);
@@ -839,14 +847,15 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">Selecionar Montador</label>
               <select
+                id="select-report-operator"
                 value={selectedOperatorId}
                 onChange={(e) => setSelectedOperatorId(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
               >
-                <option value="all">Todos os Montadores ({operators.length})</option>
-                {operators.map((op) => (
+                <option value="all">Todos os Montadores ({cleanOperators.length})</option>
+                {cleanOperators.map((op) => (
                   <option key={op.id} value={op.id}>
-                    {op.code} - {op.name} ({op.specialty})
+                    {op.code} - {op.name}
                   </option>
                 ))}
               </select>

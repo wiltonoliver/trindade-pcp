@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
-import { deleteOrderFromFirestore, saveOrderToFirestore } from '@/lib/firestoreSync';
+import { deleteOrderFromFirestore, saveOrderToFirestore, isMockOperator } from '@/lib/firestoreSync';
 import { normalizeDateToDDMMYYYY, isDateBefore, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
 import {
   notifyOrderReceived,
@@ -189,12 +189,12 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const currentPageDays = allBusinessDays.slice(pageStartIndex, pageStartIndex + 5);
   const columnsConfig = allColumnsConfig.slice(pageStartIndex, pageStartIndex + 5);
 
-  // Filter active orders (excluding completed ones) and filter by search query
-  const activeOrders = orders.filter((ord) => ord.executionStatus !== 'concluido' && ord.progress !== 100);
+  // Filter active orders (excluding completed and closed ones) and filter by search query
+  const activeOrders = orders.filter((ord) => ord.executionStatus !== 'concluido' && !ord.isClosedUncompleted && ord.progress !== 100);
 
   // Orders overdue for check-off from past dates
   const overdueCheckouts = orders.filter((ord) =>
-    isOrderOverdueForCheckoff(ord.productionDate, ord.executionStatus, ord.progress)
+    isOrderOverdueForCheckoff(ord.productionDate, ord.executionStatus, ord.progress, undefined, ord.isClosedUncompleted)
   );
 
   const filteredOrders = activeOrders.filter((ord) => {
@@ -1430,7 +1430,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                     type="text"
                     value={operatorSearchQuery}
                     onChange={(e) => setOperatorSearchQuery(e.target.value)}
-                    placeholder="Buscar por nome, código (OP-101) ou especialidade..."
+                    placeholder="Buscar por nome, código (OP-01) ou especialidade..."
                     className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -1438,7 +1438,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                 {/* Operators list */}
                 <div className="max-h-48 sm:max-h-56 overflow-y-auto space-y-2 pr-1">
                   {operators
-                    .filter((op) => op.status === 'Ativo')
+                    .filter((op) => op.status === 'Ativo' && !isMockOperator(op))
+                    .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }))
                     .filter((op) => {
                       if (!operatorSearchQuery) return true;
                       const q = operatorSearchQuery.toLowerCase();
