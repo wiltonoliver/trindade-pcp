@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile } from '@/types/factory';
+import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore, saveOrderToFirestore, isMockOperator } from '@/lib/firestoreSync';
 import { normalizeDateToDDMMYYYY, isDateBefore, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
@@ -10,6 +10,7 @@ import {
   notifyProductionScheduled,
   notifyProductionRescheduled,
   notifyOrderNotCompletedPendingDate,
+  notifyOrderDeleted,
 } from '@/lib/notificationService';
 
 interface PlanningDashboardProps {
@@ -40,6 +41,8 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   const [draggedOrderId, setDraggedOrderId] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState<OrderItem | null>(null);
+  const [dayToReset, setDayToReset] = useState<{ id: string; title: string; defaultDateStr: string } | null>(null);
+  const [isResetting, setIsResetting] = useState(false);
 
   const userRole = currentUser?.role?.toLowerCase() || '';
   const isVendasRole = userRole.includes('venda') || userRole.includes('lojista') || userRole.includes('representante');
@@ -79,6 +82,59 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
             }
           : null
       );
+    }
+  };
+
+  const handleResetDayProduction = async (col: { id: string; title: string; defaultDateStr: string }) => {
+    if (isReadOnly) return;
+    const colOrders = getOrdersByColumn(col);
+    if (colOrders.length === 0) {
+      setDayToReset(null);
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const updatedList = orders.map((ord) => {
+        const isMatch = colOrders.some((co) => co.id === ord.id);
+        if (!isMatch) return ord;
+
+        const historyEntry: OrderStatusHistoryLog = {
+          id: `hist-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          timestamp: nowIso,
+          author: currentUser?.name || 'Gestor de Produção',
+          status: 'retornado_aguardando',
+          actionType: 'return_to_pending',
+          previousDate: ord.productionDate || col.defaultDateStr,
+          note: `Programação de ${col.title} (${col.defaultDateStr}) cancelada/refeita pelo gestor. Pedido retornado para Aguardando Data sem montador.`,
+        };
+
+        const updated: OrderItem = {
+          ...ord,
+          column: 'nao_planejado',
+          productionDate: 'Aguardando Data',
+          assignedOperatorId: undefined,
+          assignedOperatorName: undefined,
+          assignedOperatorCode: undefined,
+          executionStatus: 'pendente',
+          statusHistory: [...(ord.statusHistory || []), historyEntry],
+        };
+
+        saveOrderToFirestore(updated).catch((err) => console.error('Erro ao salvar no Firestore:', err));
+        notifyOrderNotCompletedPendingDate(
+          ord.orderId,
+          ord.store,
+          `Produção de ${col.title} foi cancelada/refeita pelo gestor`,
+          currentUser?.name
+        );
+        return updated;
+      });
+
+      setOrders(updatedList);
+    } finally {
+      setIsResetting(false);
+      setDayToReset(null);
     }
   };
 
@@ -682,16 +738,29 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                       </span>
                     </div>
                     {!isReadOnly && (
-                      <button
-                        onClick={() => {
-                          setNewColumn(col.id);
-                          setIsAddModalOpen(true);
-                        }}
-                        className="material-symbols-outlined text-slate-300 hover:text-blue-600 transition-colors text-[18px] cursor-pointer shrink-0"
-                        title="Adicionar à coluna"
-                      >
-                        add_circle
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {colOrders.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDayToReset(col)}
+                            className="material-symbols-outlined text-slate-400 hover:text-amber-600 transition-colors text-[18px] cursor-pointer"
+                            title="Refazer produção deste dia (voltar para Aguardando Data)"
+                          >
+                            replay
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewColumn(col.id);
+                            setIsAddModalOpen(true);
+                          }}
+                          className="material-symbols-outlined text-slate-400 hover:text-blue-600 transition-colors text-[18px] cursor-pointer"
+                          title="Adicionar pedido à coluna"
+                        >
+                          add_circle
+                        </button>
+                      </div>
                     )}
                   </div>
 
@@ -923,16 +992,29 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                   </div>
 
                   {!isReadOnly && (
-                    <button
-                      onClick={() => {
-                        setNewColumn(col.id);
-                        setIsAddModalOpen(true);
-                      }}
-                      className="px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
-                    >
-                      <span className="material-symbols-outlined text-[16px] text-blue-600">add</span>
-                      <span>Adicionar Pedido</span>
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      {colOrders.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setDayToReset(col)}
+                          className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 hover:border-amber-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                          title="Devolver todos os pedidos deste dia para Aguardando Data e desvincular montadores"
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-amber-600">replay</span>
+                          <span>Refazer Produção</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setNewColumn(col.id);
+                          setIsAddModalOpen(true);
+                        }}
+                        className="px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">add</span>
+                        <span>Adicionar Pedido</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -950,7 +1032,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                         <th className="px-2.5 py-2.5 whitespace-nowrap w-24">Progresso</th>
                         <th className="px-2.5 py-2.5 whitespace-nowrap">Data Programada</th>
                         <th className="px-2.5 py-2.5 whitespace-nowrap">Etapa</th>
-                        <th className="px-2 py-2.5 text-right whitespace-nowrap w-14">Ações</th>
+                        <th className="px-2.5 py-2.5 text-center whitespace-nowrap w-20">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs">
@@ -1166,24 +1248,24 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                             </td>
 
                             {/* Actions */}
-                            <td className="px-2 py-2.5 text-right whitespace-nowrap w-14">
-                              <div className="flex items-center justify-end gap-0.5">
+                            <td className="px-2.5 py-2.5 text-center whitespace-nowrap w-20">
+                              <div className="flex items-center justify-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => setSelectedOrderForStatusModal(ord)}
-                                  className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
-                                  title="Relatar status / motivo da OP"
+                                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Ver detalhes / Relatar status da OP"
                                 >
-                                  <span className="material-symbols-outlined text-[16px]">edit_note</span>
+                                  <span className="material-symbols-outlined text-[18px]">edit_note</span>
                                 </button>
                                 {!isReadOnly && (
                                   <button
                                     type="button"
                                     onClick={() => setOrderToDelete(ord)}
-                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                                    title="Excluir pedido"
+                                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Excluir este pedido"
                                   >
-                                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                                    <span className="material-symbols-outlined text-[18px]">delete</span>
                                   </button>
                                 )}
                               </div>
@@ -1379,6 +1461,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
                       }
                     }
                     deleteOrderFromFirestore(deletedId).catch((err) => console.error('Erro ao excluir pedido do Firestore:', err));
+                    notifyOrderDeleted(orderToDelete.orderId, orderToDelete.store, currentUser?.name);
                   }
                   setOrders((prev) => prev.filter((o) => o.id !== deletedId));
                   setOrderToDelete(null);
@@ -1387,6 +1470,57 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
               >
                 <span className="material-symbols-outlined text-[16px]">delete</span>
                 <span>Excluir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Day Production Modal */}
+      {dayToReset && !isReadOnly && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-slate-200 animate-scaleUp space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[28px]">replay</span>
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Refazer Produção deste Dia?</h3>
+                <p className="text-xs text-slate-500 font-medium">{dayToReset.title} ({dayToReset.defaultDateStr})</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl space-y-2 text-xs text-amber-900 leading-relaxed">
+              <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                <span className="material-symbols-outlined text-sm text-amber-600">info</span>
+                O que acontecerá ao confirmar:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-slate-700 text-[11.5px]">
+                <li>Todos os pedidos deste dia voltarão para a coluna <strong>Aguardando Data</strong>.</li>
+                <li>As designações dos respectivos montadores serão <strong>removidas</strong> para reagendamento.</li>
+                <li>O histórico do pedido registrará o cancelamento da programação pelo gestor.</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => setDayToReset(null)}
+                className="px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isResetting}
+                onClick={() => handleResetDayProduction(dayToReset)}
+                className="px-5 py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold hover:bg-amber-700 transition-colors shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  {isResetting ? 'progress_activity' : 'replay'}
+                </span>
+                <span>{isResetting ? 'Processando...' : 'Confirmar e Refazer'}</span>
               </button>
             </div>
           </div>
@@ -1564,6 +1698,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         isOpen={!!selectedOrderForStatusModal}
         onClose={() => setSelectedOrderForStatusModal(null)}
         currentUser={currentUser}
+        onDeleteOrder={(ord) => setOrderToDelete(ord)}
         onUpdateOrder={(updatedOrder) => {
           setOrders((prev) =>
             prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))

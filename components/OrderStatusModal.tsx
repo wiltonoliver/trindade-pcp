@@ -20,6 +20,7 @@ interface OrderStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdateOrder: (updatedOrder: OrderItem) => void;
+  onDeleteOrder?: (order: OrderItem) => void;
   currentUser?: UserProfile | null;
 }
 
@@ -43,6 +44,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   isOpen,
   onClose,
   onUpdateOrder,
+  onDeleteOrder,
   currentUser,
 }) => {
   const [selectedStatus, setSelectedStatus] = useState<ExecutionStatus | 'retornado_aguardando'>(
@@ -2180,16 +2182,30 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
-          <div className="text-[11px] text-slate-500 font-medium">
+        <div className="p-4 bg-slate-100 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3">
+            {!isReadOnly && onDeleteOrder && order && (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteOrder(order);
+                  onClose();
+                }}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 text-xs font-bold rounded-xl border border-rose-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                title="Excluir este pedido definitivamente"
+              >
+                <span className="material-symbols-outlined text-[16px] text-rose-600">delete</span>
+                <span>Excluir Pedido</span>
+              </button>
+            )}
             {hasFieldsChanged && (
-              <span className="text-amber-800 font-bold flex items-center gap-1">
+              <span className="text-amber-800 font-bold text-[11px] flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm text-amber-600">warning</span>
                 Existem edições de dados não salvas
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-end">
             {isReadOnly ? (
               <>
                 {hasFieldsChanged && (
