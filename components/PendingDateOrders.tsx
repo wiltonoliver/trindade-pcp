@@ -313,7 +313,13 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
 
   // Direct order field updater
   const handleUpdateOrder = (updatedOrder: OrderItem) => {
-    setOrders((prev) => prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)));
+    setOrders((prev) => {
+      const next = prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('factoryops_orders', JSON.stringify(next));
+      }
+      return next;
+    });
     saveOrderToFirestore(updatedOrder).catch(console.error);
   };
 
@@ -386,6 +392,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
   // Quick operator assignment
   const handleQuickUpdateOperator = (ord: OrderItem, op: AssemblyOperator | null) => {
     if (isReadOnly) return;
+    const current = orders.find((o) => o.id === ord.id) || ord;
     const now = new Date().toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
@@ -395,7 +402,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
     });
 
     const updated: OrderItem = {
-      ...ord,
+      ...current,
       assignedOperatorName: op ? op.name : undefined,
       assignedOperatorCode: op ? op.code : undefined,
       assignedOperatorId: op ? op.id : undefined,
@@ -1760,8 +1767,14 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
 
       {/* Modal: Atribuir Montador Rápido */}
       {orderForOperatorSelect && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-4 animate-scaleUp">
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn"
+          onClick={() => setOrderForOperatorSelect(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-100 space-y-4 animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center font-bold shrink-0">
@@ -1785,7 +1798,10 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
               {/* Option: Unassign */}
               <button
                 type="button"
-                onClick={() => handleQuickUpdateOperator(orderForOperatorSelect, null)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleQuickUpdateOperator(orderForOperatorSelect, null);
+                }}
                 className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                   !orderForOperatorSelect.assignedOperatorName
                     ? 'bg-slate-100 border-slate-300 font-bold text-slate-800'
@@ -1808,7 +1824,10 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                   <button
                     key={op.id}
                     type="button"
-                    onClick={() => handleQuickUpdateOperator(orderForOperatorSelect, op)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuickUpdateOperator(orderForOperatorSelect, op);
+                    }}
                     className={`w-full p-3 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-900 font-bold'

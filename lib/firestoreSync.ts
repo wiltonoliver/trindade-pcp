@@ -1,5 +1,5 @@
 import { db } from './firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { OrderItem, Store, AssemblyOperator, UserProfile, AppNotification, MaterialRequest } from '@/types/factory';
 
 /**
@@ -12,7 +12,7 @@ export const subscribeOrders = (onUpdate: (orders: OrderItem[]) => void) => {
     (snapshot) => {
       const list: OrderItem[] = [];
       snapshot.forEach((docSnap) => {
-        list.push(docSnap.data() as OrderItem);
+        list.push({ ...docSnap.data(), id: docSnap.data().id || docSnap.id } as OrderItem);
       });
       onUpdate(list);
     },
@@ -118,7 +118,34 @@ export const saveOrderToFirestore = async (order: OrderItem) => {
   if (!order.id) return;
   try {
     const docRef = doc(db, 'orders', order.id);
-    const cleanOrder = sanitizeForFirestore(order);
+    const cleanOrder = sanitizeForFirestore(order) as Record<string, any>;
+
+    // Explicitly delete unassigned/cleared fields so Firestore removes them instead of keeping old values in merge: true
+    if (!order.assignedOperatorName) {
+      cleanOrder.assignedOperatorName = deleteField();
+    }
+    if (!order.assignedOperatorCode) {
+      cleanOrder.assignedOperatorCode = deleteField();
+    }
+    if (!order.assignedOperatorId) {
+      cleanOrder.assignedOperatorId = deleteField();
+    }
+    if (!order.assignedAt && !order.assignedOperatorName) {
+      cleanOrder.assignedAt = deleteField();
+    }
+    if (!order.deliveryDate) {
+      cleanOrder.deliveryDate = deleteField();
+    }
+    if (!order.delayReason) {
+      cleanOrder.delayReason = deleteField();
+    }
+    if (!order.pendingReason) {
+      cleanOrder.pendingReason = deleteField();
+    }
+    if (!order.urgencyRequest) {
+      cleanOrder.urgencyRequest = deleteField();
+    }
+
     await setDoc(docRef, cleanOrder, { merge: true });
   } catch (error) {
     console.error('Erro ao salvar pedido no Firestore:', error);
