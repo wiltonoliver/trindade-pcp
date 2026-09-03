@@ -81,6 +81,7 @@ export interface OrderItem {
   assignedOperatorId?: string;
   assignedOperatorName?: string;
   assignedOperatorCode?: string;
+  assignedAt?: string;
   cleanlinessScore?: number;
   organizationScore?: number;
   disciplineScore?: number;

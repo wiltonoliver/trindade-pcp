@@ -777,6 +777,7 @@ export default function FactoryOpsApp() {
             orders={orders}
             setOrders={setOrders}
             stores={stores}
+            setStores={setStores}
             operators={operators}
             searchQuery={searchQuery}
             currentUser={currentUser}
@@ -808,6 +809,7 @@ export default function FactoryOpsApp() {
             operators={operators}
             searchQuery={searchQuery}
             currentUser={currentUser}
+            stores={stores}
             onOpenDevModal={() => setIsDevModalOpen(true)}
             onNavigateToOrderEntry={() => {
               if (isTabAllowed('order-entry')) {

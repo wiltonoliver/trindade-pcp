@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
+import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile, OrderStatusHistoryLog, Store } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore, saveOrderToFirestore, isMockOperator } from '@/lib/firestoreSync';
 import { normalizeDateToDDMMYYYY, isDateBefore, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
@@ -22,6 +22,7 @@ interface PlanningDashboardProps {
   onNavigateToPendingCheckouts?: () => void;
   onOpenDevModal?: () => void;
   currentUser?: UserProfile | null;
+  stores?: Store[];
 }
 
 export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
@@ -33,6 +34,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   onNavigateToPendingCheckouts,
   onOpenDevModal,
   currentUser,
+  stores,
 }) => {
   const [selectedPeriod, setSelectedPeriod] = useState<'mes' | 'semana'>('mes');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list');
@@ -1698,6 +1700,7 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
         isOpen={!!selectedOrderForStatusModal}
         onClose={() => setSelectedOrderForStatusModal(null)}
         currentUser={currentUser}
+        stores={stores}
         onDeleteOrder={(ord) => setOrderToDelete(ord)}
         onUpdateOrder={(updatedOrder) => {
           setOrders((prev) =>

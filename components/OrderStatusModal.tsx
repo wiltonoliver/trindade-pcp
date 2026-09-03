@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef } from 'react';
-import { OrderItem, ExecutionStatus, OrderStatusHistoryLog, UserProfile, UrgencyRequest } from '@/types/factory';
+import { OrderItem, ExecutionStatus, OrderStatusHistoryLog, UserProfile, UrgencyRequest, Store } from '@/types/factory';
 import { sanitizeUnit } from '@/lib/utils';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
 import { compressImageFile } from '@/lib/imageUtils';
@@ -22,6 +22,7 @@ interface OrderStatusModalProps {
   onUpdateOrder: (updatedOrder: OrderItem) => void;
   onDeleteOrder?: (order: OrderItem) => void;
   currentUser?: UserProfile | null;
+  stores?: Store[];
 }
 
 const COMMON_REASONS = [
@@ -46,6 +47,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   onUpdateOrder,
   onDeleteOrder,
   currentUser,
+  stores,
 }) => {
   const [selectedStatus, setSelectedStatus] = useState<ExecutionStatus | 'retornado_aguardando'>(
     order?.executionStatus || (order?.progress === 100 ? 'concluido' : 'nao_produzido')
@@ -62,13 +64,35 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   const [organizationScore, setOrganizationScore] = useState<number>(order?.organizationScore || 5);
   const [disciplineScore, setDisciplineScore] = useState<number>(order?.disciplineScore || 5);
 
-  // Editable item description & delivery date
+  // Editable store, item description & delivery date
+  const [editableStore, setEditableStore] = useState<string>(order?.store || '');
   const [editableItemDescription, setEditableItemDescription] = useState<string>(order?.itemDescription || '');
   const [editableDeliveryDate, setEditableDeliveryDate] = useState<string>(order?.deliveryDate || '');
   const [modalImage, setModalImage] = useState<string | null>(order?.imageUrl || null);
   const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
   const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
   const modalFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Available registered stores for suggestions / autocomplete
+  const [availableStores, setAvailableStores] = useState<Store[]>(stores || []);
+
+  React.useEffect(() => {
+    if (stores && stores.length > 0) {
+      setAvailableStores(stores);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem('factoryops_stores');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAvailableStores(parsed);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading stores in OrderStatusModal:', e);
+    }
+  }, [stores]);
 
   // Helper date generators for partial rescheduling
   const getTomorrowInputDate = () => {
@@ -110,6 +134,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     setCleanlinessScore(order.cleanlinessScore || 5);
     setOrganizationScore(order.organizationScore || 5);
     setDisciplineScore(order.disciplineScore || 5);
+    setEditableStore(order.store || '');
     setEditableItemDescription(order.itemDescription || '');
     setEditableDeliveryDate(order.deliveryDate || '');
     setModalImage(order.imageUrl || null);
@@ -117,6 +142,19 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     setPartialRemainingAction('reschedule');
     setPartialRescheduleDate(getTomorrowInputDate());
   }
+
+  // Derive store initials for the edited store
+  const getStoreInitials = (storeName: string): string => {
+    const clean = storeName.trim();
+    if (!clean) return order?.storeInitials || 'OP';
+    const matched = availableStores.find((s) => s.name.trim().toLowerCase() === clean.toLowerCase());
+    if (matched?.code) return matched.code;
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return clean.substring(0, 2).toUpperCase() || order?.storeInitials || 'OP';
+  };
 
   const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -160,11 +198,12 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
   const hasFieldsChanged = useMemo(() => {
     if (!order) return false;
+    const storeChanged = (editableStore || '').trim() !== (order.store || '').trim();
     const descChanged = (editableItemDescription || '').trim() !== (order.itemDescription || '').trim();
     const dateChanged = (editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim();
     const imageChanged = (modalImage || null) !== (order.imageUrl || null);
-    return descChanged || dateChanged || imageChanged;
-  }, [order, editableItemDescription, editableDeliveryDate, modalImage]);
+    return storeChanged || descChanged || dateChanged || imageChanged;
+  }, [order, editableStore, editableItemDescription, editableDeliveryDate, modalImage]);
 
   // Urgency Request Local States
   const [urgencyReasonText, setUrgencyReasonText] = useState<string>('');
@@ -753,8 +792,13 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     });
 
     const authorName = currentUser?.name || currentUser?.role || 'Usuário';
+    const effectiveStore = (editableStore || '').trim() || order.store;
+    const newStoreInitials = getStoreInitials(effectiveStore);
 
     const fieldChangeNotes: string[] = [];
+    if (effectiveStore !== order.store) {
+      fieldChangeNotes.push(`Loja alterada de "${order.store}" para "${effectiveStore}"`);
+    }
     if ((editableItemDescription || '').trim() !== (order.itemDescription || '').trim()) {
       fieldChangeNotes.push(`Descrição da peça alterada para "${editableItemDescription.trim()}"`);
     }
@@ -770,13 +814,15 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       timestamp: nowStr,
       author: authorName,
       status: order.executionStatus,
-      reason: 'Atualização de Cadastro / Peça / Imagem',
+      reason: 'Atualização de Cadastro / Loja / Peça / Imagem',
       note: fieldChangeNotes.join('; '),
       actionType: 'status_update',
     };
 
     const updatedOrder: OrderItem = {
       ...order,
+      store: effectiveStore,
+      storeInitials: newStoreInitials,
       itemDescription: editableItemDescription.trim() || order.itemDescription,
       deliveryDate: editableDeliveryDate.trim(),
       imageUrl: modalImage || undefined,
@@ -801,9 +847,14 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     const authorName = currentUser?.name || currentUser?.role || 'Gestor de Operações';
     const totalQty = order.quantity || 1;
     const effectiveReason = selectedReason || (selectedStatus === 'concluido' ? '' : 'Sem motivo especificado');
+    const effectiveStore = (editableStore || '').trim() || order.store;
+    const newStoreInitials = getStoreInitials(effectiveStore);
 
     // Notes for field changes if updated
     const fieldChangeNotes: string[] = [];
+    if (effectiveStore !== order.store) {
+      fieldChangeNotes.push(`Loja alterada de "${order.store}" para "${effectiveStore}"`);
+    }
     if ((editableItemDescription || '').trim() !== (order.itemDescription || '').trim()) {
       fieldChangeNotes.push(`Descrição da peça alterada para "${editableItemDescription.trim()}"`);
     }
@@ -839,6 +890,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
       const updatedOrder: OrderItem = {
         ...order,
+        store: effectiveStore,
+        storeInitials: newStoreInitials,
         itemDescription: editableItemDescription.trim() || order.itemDescription,
         deliveryDate: editableDeliveryDate.trim(),
         imageUrl: modalImage || undefined,
@@ -855,7 +908,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
       onUpdateOrder(updatedOrder);
       saveOrderToFirestore(updatedOrder);
-      notifyOrderCompleted(order.orderId, order.store, authorName);
+      notifyOrderCompleted(order.orderId, effectiveStore, authorName);
       onClose();
       return;
     }
@@ -894,6 +947,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       // The original order represents the completed quantity and is marked as finished
       const updatedOrder: OrderItem = {
         ...order,
+        store: effectiveStore,
+        storeInitials: newStoreInitials,
         itemDescription: editableItemDescription.trim() || order.itemDescription,
         deliveryDate: editableDeliveryDate.trim(),
         imageUrl: modalImage || undefined,
@@ -933,6 +988,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
         const remainingOrder: OrderItem = {
           ...order,
+          store: effectiveStore,
+          storeInitials: newStoreInitials,
           id: `split-${order.id}-${Date.now()}`,
           orderId: splitOrderId,
           itemDescription: `${editableItemDescription.trim() || order.itemDescription} (Saldo ${remainingQty} un)`,
@@ -952,7 +1009,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               author: authorName,
               status: 'pendente',
               reason: 'Pedido Recebido',
-              note: `Saldo gerado a partir da OP #${order.orderId} para a loja ${order.store}. Quantidade: ${remainingQty} ${sanitizeUnit(order.unit)}.`,
+              note: `Saldo gerado a partir da OP #${order.orderId} para a loja ${effectiveStore}. Quantidade: ${remainingQty} ${sanitizeUnit(order.unit)}.`,
               actionType: 'status_update',
             }
           ],
@@ -961,9 +1018,9 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         saveOrderToFirestore(remainingOrder);
 
         if (isResched) {
-          notifyUrgencyApproved(splitOrderId, order.store, authorName);
+          notifyUrgencyApproved(splitOrderId, effectiveStore, authorName);
         } else {
-          notifyOrderNotCompletedPendingDate(splitOrderId, order.store, effectiveReason, authorName);
+          notifyOrderNotCompletedPendingDate(splitOrderId, effectiveStore, effectiveReason, authorName);
         }
       }
 
@@ -989,6 +1046,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
       const updatedOrder: OrderItem = {
         ...order,
+        store: effectiveStore,
+        storeInitials: newStoreInitials,
         itemDescription: editableItemDescription.trim() || order.itemDescription,
         deliveryDate: editableDeliveryDate.trim(),
         imageUrl: modalImage || undefined,
@@ -1011,7 +1070,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
       onUpdateOrder(updatedOrder);
       saveOrderToFirestore(updatedOrder);
-      notifyOrderClosedUncompleted(order.orderId, order.store, effectiveReason, authorName);
+      notifyOrderClosedUncompleted(order.orderId, effectiveStore, effectiveReason, authorName);
       onClose();
       return;
     }
@@ -1033,6 +1092,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     const updatedOrder: OrderItem = {
       ...order,
+      store: effectiveStore,
+      storeInitials: newStoreInitials,
       itemDescription: editableItemDescription.trim() || order.itemDescription,
       deliveryDate: editableDeliveryDate.trim(),
       imageUrl: modalImage || undefined,
@@ -1055,7 +1116,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     onUpdateOrder(updatedOrder);
     saveOrderToFirestore(updatedOrder);
-    notifyOrderNotCompletedPendingDate(order.orderId, order.store, effectiveReason, authorName);
+    notifyOrderNotCompletedPendingDate(order.orderId, effectiveStore, effectiveReason, authorName);
     onClose();
   };
 
@@ -1072,7 +1133,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-black text-base text-white">OP #{order.orderId}</span>
                 <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[10px] font-bold">
-                  {order.store}
+                  {editableStore || order.store}
                 </span>
                 {order.isClosedUncompleted && (
                   <span className="px-2 py-0.5 bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[10px] font-bold flex items-center gap-1">
@@ -1131,12 +1192,12 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
             </div>
           </div>
 
-          {/* Editable Fields Section: Item Description & Delivery Date */}
+          {/* Editable Fields Section: Store, Item Description & Delivery Date */}
           <div className="bg-slate-50 p-4 rounded-2xl border border-blue-100 shadow-2xs space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-blue-600 text-base">edit_note</span>
-                <span>Editar Peça &amp; Data de Previsão de Entrega</span>
+                <span>Editar Loja, Peça &amp; Data de Previsão de Entrega</span>
               </span>
               {hasFieldsChanged && (
                 <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold border border-amber-300 animate-pulse flex items-center gap-1">
@@ -1146,9 +1207,39 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              {/* Store Name (Loja / Cliente) */}
+              <div className="md:col-span-4 space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[15px] text-blue-600">store</span>
+                  <span>Nome da Loja / Cliente</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="modal-stores-datalist"
+                    value={editableStore}
+                    onChange={(e) => setEditableStore(e.target.value)}
+                    placeholder="Selecione ou digite a loja..."
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-all pr-7"
+                  />
+                  {availableStores.length > 0 && (
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <span className="material-symbols-outlined text-[16px]">unfold_more</span>
+                    </div>
+                  )}
+                  <datalist id="modal-stores-datalist">
+                    {availableStores.map((s) => (
+                      <option key={s.id || s.name} value={s.name}>
+                        {s.code ? `${s.name} (${s.code})` : s.name}
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
               {/* Item Description (Peça) */}
-              <div className="md:col-span-2 space-y-1">
+              <div className="md:col-span-5 space-y-1">
                 <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[15px] text-blue-600">inventory_2</span>
                   <span>Descrição da Peça (Esquadria)</span>
@@ -1163,10 +1254,10 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               </div>
 
               {/* Delivery Date */}
-              <div className="space-y-1">
+              <div className="md:col-span-3 space-y-1">
                 <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[15px] text-amber-600">event</span>
-                  <span>Data Prevista de Entrega</span>
+                  <span>Data Prev. Entrega</span>
                 </label>
                 <input
                   type="date"
@@ -2265,7 +2356,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         onClose={() => setIsLightboxOpen(false)}
         imageUrl={modalImage}
         title={`OP #${order.orderId} - ${editableItemDescription || order.itemDescription}`}
-        subtitle={`Loja: ${order.store} • Entrega: ${editableDeliveryDate || order.deliveryDate || 'Sem data'}`}
+        subtitle={`Loja: ${editableStore || order.store} • Entrega: ${editableDeliveryDate || order.deliveryDate || 'Sem data'}`}
         orderId={order.orderId}
       />
     </div>
