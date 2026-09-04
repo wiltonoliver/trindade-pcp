@@ -60,7 +60,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     const lastDay = new Date(year, today.getMonth() + 1, 0).getDate();
     return `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
   });
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('open');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Date helper to normalize YYYY-MM-DD or DD/MM/YYYY formats
@@ -118,6 +118,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       }
 
       // 2. Date Filter
+      // If dateMode === 'all_time', we do not filter by production date so all orders can be retrieved
       if (dateMode === 'single' && singleDate) {
         const orderDateNorm = parseNormalizedDate(order.productionDate);
         if (!orderDateNorm || orderDateNorm !== singleDate) {
@@ -131,9 +132,17 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       }
 
       // 3. Status Filter
-      if (statusFilter === 'completed' && order.progress < 100) return false;
-      if (statusFilter === 'in_progress' && (order.progress === 0 || order.progress === 100)) return false;
-      if (statusFilter === 'pending' && order.progress > 0) return false;
+      const isCompleted = order.progress === 100 || order.executionStatus === 'concluido';
+      if (statusFilter === 'open') {
+        // Open means not completed and not closed uncompleted
+        if (isCompleted || order.isClosedUncompleted) return false;
+      } else if (statusFilter === 'completed') {
+        if (!isCompleted) return false;
+      } else if (statusFilter === 'in_progress') {
+        if (isCompleted || order.isClosedUncompleted || order.progress === 0) return false;
+      } else if (statusFilter === 'pending') {
+        if (isCompleted || order.isClosedUncompleted || order.progress > 0) return false;
+      }
 
       // 4. Search Query
       if (searchQuery.trim()) {
@@ -222,6 +231,43 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     return Object.values(map);
   }, [filteredOrders]);
 
+  // Group orders by Store for Store Report
+  const groupedByStore = useMemo(() => {
+    const map: {
+      [key: string]: {
+        name: string;
+        orders: typeof filteredOrders;
+        totalQty: number;
+        openQty: number;
+        completedQty: number;
+      };
+    } = {};
+
+    filteredOrders.forEach((order) => {
+      const sName = (order.store || '').trim() || 'Loja Não Informada';
+      if (!map[sName]) {
+        map[sName] = {
+          name: sName,
+          orders: [],
+          totalQty: 0,
+          openQty: 0,
+          completedQty: 0,
+        };
+      }
+      map[sName].orders.push(order);
+      const q = order.quantity || 1;
+      map[sName].totalQty += q;
+      const isDone = order.progress === 100 || order.executionStatus === 'concluido';
+      if (isDone) {
+        map[sName].completedQty += q;
+      } else {
+        map[sName].openQty += q;
+      }
+    });
+
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+  }, [filteredOrders]);
+
   // Selected entities for display header
   const selectedOperatorObj = operators.find((op) => op.id === selectedOperatorId);
   const activeOperatorTitle = selectedOperatorId === 'all'
@@ -242,21 +288,49 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       margin: 0;
       padding: 16px;
     }
+    .border { border: 1px solid #0f172a !important; }
     .border-2 { border: 2px solid #0f172a !important; }
+    .border-b { border-bottom: 1px solid #cbd5e1 !important; }
+    .border-b-2 { border-bottom: 2px solid #0f172a !important; }
+    .border-t { border-top: 1px solid #cbd5e1 !important; }
+    .border-t-2 { border-top: 2px solid #0f172a !important; }
+    .border-r { border-right: 1px solid #94a3b8 !important; }
+    .border-l { border-left: 1px solid #94a3b8 !important; }
     .border-slate-900 { border-color: #0f172a !important; }
     .border-slate-800 { border-color: #1e293b !important; }
+    .border-slate-700 { border-color: #334155 !important; }
     .border-slate-400 { border-color: #94a3b8 !important; }
     .border-slate-300 { border-color: #cbd5e1 !important; }
+    .bg-slate-900 { background-color: #0f172a !important; }
+    .bg-slate-800 { background-color: #1e293b !important; }
+    .bg-slate-700 { background-color: #334155 !important; }
+    .bg-slate-500 { background-color: #64748b !important; }
     .bg-slate-300 { background-color: #cbd5e1 !important; }
     .bg-slate-200 { background-color: #e2e8f0 !important; }
     .bg-slate-100 { background-color: #f1f5f9 !important; }
-    .bg-slate-500 { background-color: #64748b !important; }
+    .bg-slate-50 { background-color: #f8fafc !important; }
     .bg-white { background-color: #ffffff !important; }
+    .bg-blue-50 { background-color: #eff6ff !important; }
+    .bg-amber-50 { background-color: #fffbeb !important; }
+    .bg-emerald-50 { background-color: #ecfdf5 !important; }
     .text-slate-900 { color: #0f172a !important; }
+    .text-slate-800 { color: #1e293b !important; }
+    .text-slate-700 { color: #334155 !important; }
+    .text-slate-600 { color: #475569 !important; }
+    .text-slate-400 { color: #94a3b8 !important; }
+    .text-slate-300 { color: #cbd5e1 !important; }
     .text-white { color: #ffffff !important; }
+    .text-blue-900 { color: #1e3a8a !important; }
+    .text-blue-700 { color: #1d4ed8 !important; }
+    .text-emerald-700 { color: #047857 !important; }
+    .text-amber-800 { color: #92400e !important; }
+    .text-red-700 { color: #b91c1c !important; }
     .bg-\[\#346294\], .bg-blue-800 { background-color: #346294 !important; }
     .font-black { font-weight: 900 !important; }
+    .font-extrabold { font-weight: 800 !important; }
     .font-bold { font-weight: 700 !important; }
+    .font-semibold { font-weight: 600 !important; }
+    .font-medium { font-weight: 500 !important; }
     .text-center { text-align: center !important; }
     .text-right { text-align: right !important; }
     .uppercase { text-transform: uppercase !important; }
@@ -265,6 +339,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     .p-1 { padding: 4px !important; }
     .p-1\.5 { padding: 6px !important; }
     .p-2 { padding: 8px !important; }
+    .p-2\.5 { padding: 10px !important; }
     .p-3 { padding: 12px !important; }
     .p-4 { padding: 16px !important; }
     .pl-2 { padding-left: 8px !important; }
@@ -275,31 +350,46 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     .py-1\.5 { padding-top: 6px !important; padding-bottom: 6px !important; }
     .py-2 { padding-top: 8px !important; padding-bottom: 8px !important; }
     .px-2 { padding-left: 8px !important; padding-right: 8px !important; }
+    .px-2\.5 { padding-left: 10px !important; padding-right: 10px !important; }
     .px-3 { padding-left: 12px !important; padding-right: 12px !important; }
     .my-1 { margin-top: 4px !important; margin-bottom: 4px !important; }
     .mb-1 { margin-bottom: 4px !important; }
     .-mx-3 { margin-left: -12px !important; margin-right: -12px !important; }
     .w-full { width: 100% !important; }
+    .w-14 { width: 56px !important; }
     .w-16 { width: 64px !important; }
+    .w-24 { width: 96px !important; }
+    .w-28 { width: 112px !important; }
+    .w-36 { width: 144px !important; }
+    .space-y-2 > * + * { margin-top: 8px !important; }
     .space-y-3 > * + * { margin-top: 12px !important; }
     .space-y-4 > * + * { margin-top: 16px !important; }
+    .rounded { border-radius: 4px !important; }
     .rounded-lg { border-radius: 8px !important; }
     .rounded-md { border-radius: 6px !important; }
     .flex { display: flex !important; }
     .inline-flex { display: inline-flex !important; }
     .flex-col { flex-direction: column !important; }
     .justify-center { justify-content: center !important; }
+    .justify-between { justify-content: space-between !important; }
     .items-center { align-items: center !important; }
+    .gap-2 { gap: 8px !important; }
     .gap-3 { gap: 12px !important; }
+    .gap-4 { gap: 16px !important; }
+    .gap-8 { gap: 32px !important; }
+    .grid { display: grid !important; }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
     .leading-none { line-height: 1 !important; }
     .shrink-0 { flex-shrink: 0 !important; }
     .overflow-hidden { overflow: hidden !important; }
     .whitespace-nowrap { white-space: nowrap !important; }
+    .divide-y > * + * { border-top: 1px solid #cbd5e1 !important; }
 
     svg { display: block; width: 32px !important; height: 32px !important; }
 
     table { width: 100%; border-collapse: collapse; font-family: system-ui, -apple-system, sans-serif; }
-    td { padding: 6px 10px; border-bottom: 1px solid #94a3b8; font-size: 11px; font-weight: 700; color: #0f172a; }
+    th { padding: 6px 8px; font-size: 10px; font-weight: 800; }
+    td { padding: 6px 8px; font-size: 11px; font-weight: 700; color: #0f172a; }
     
     .no-print-bar {
       background: #0f172a;
@@ -330,6 +420,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
       @page { size: A4 portrait; margin: 0.6cm; }
       body { padding: 0 !important; background-color: #ffffff !important; }
       .bg-slate-300 { background-color: #ffffff !important; }
+      .avoid-break { page-break-inside: avoid; }
+      .page-break { page-break-after: always; }
     }
   `;
 
@@ -338,19 +430,23 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
     const reportElem = document.getElementById('printable-report-content');
     if (!reportElem) return;
 
+    const reportTitle = reportType === 'store'
+      ? `RELATÓRIO DE ORDENS POR LOJA - ${selectedStore === 'all' ? 'TODAS AS LOJAS' : selectedStore} (${statusFilter === 'open' ? 'EM ABERTO' : 'GERAL'})`
+      : `PRODUÇÃO - TRINDADE ESQUADRIAS (${singleDate || 'Geral'})`;
+
     const htmlContent = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PRODUÇÃO - TRINDADE ESQUADRIAS (${singleDate || 'Geral'})</title>
+  <title>${reportTitle}</title>
   <style>
     ${getPrintCSS()}
   </style>
 </head>
 <body>
   <div class="no-print-bar">
-    <span>TRINDADE ESQUADRIAS DE ALUMÍNIO - FICHA OFICIAL DE PRODUÇÃO</span>
+    <span>TRINDADE ESQUADRIAS DE ALUMÍNIO - ${reportType === 'store' ? 'RELATÓRIO DE ORDENS POR LOJA' : 'FICHA OFICIAL DE PRODUÇÃO'}</span>
     <button class="btn-print" onclick="window.print()">Imprimir Agora (Ctrl+P)</button>
   </div>
   ${reportElem.innerHTML}
@@ -809,12 +905,15 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
       {/* Report Configuration & Filters Bar */}
       <div className="no-print bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-5">
-        {/* 1. Report Type Tabs */}
+        {/* 1. Report Type Tabs & Quick Action */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setReportType('operator')}
+              onClick={() => {
+                setReportType('operator');
+                setStatusFilter('all');
+              }}
               className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 reportType === 'operator'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
@@ -827,7 +926,11 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
             <button
               type="button"
-              onClick={() => setReportType('store')}
+              onClick={() => {
+                setReportType('store');
+                setStatusFilter('open');
+                setDateMode('all_time');
+              }}
               className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 reportType === 'store'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
@@ -836,63 +939,135 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
             >
               <span className="material-symbols-outlined text-[18px]">store</span>
               <span>Relatório por Loja / Cliente</span>
+              <span className="bg-white/20 text-white px-2 py-0.5 rounded-full text-[10px] font-black">
+                Em Aberto
+              </span>
+            </button>
+          </div>
+
+          {/* Quick Info & CSV Export */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Baixar planilha CSV com os dados filtrados"
+            >
+              <span className="material-symbols-outlined text-[17px]">download</span>
+              <span>Exportar CSV</span>
             </button>
           </div>
         </div>
 
         {/* 2. Specific Entity & Date Selectors */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Entity Selector (Operator or Store depending on tab) */}
-          {reportType === 'operator' && (
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Selecionar Montador</label>
-              <select
-                id="select-report-operator"
-                value={selectedOperatorId}
-                onChange={(e) => setSelectedOperatorId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-              >
-                <option value="all">Todos os Montadores ({cleanOperators.length})</option>
-                {cleanOperators.map((op) => (
-                  <option key={op.id} value={op.id}>
-                    {op.code} - {op.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+          {/* Entity Selector (Operator or Store) */}
+          <div className="md:col-span-4">
+            {reportType === 'operator' ? (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Selecionar Montador</label>
+                <select
+                  id="select-report-operator"
+                  value={selectedOperatorId}
+                  onChange={(e) => setSelectedOperatorId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
+                >
+                  <option value="all">Todos os Montadores ({cleanOperators.length})</option>
+                  {cleanOperators.map((op) => (
+                    <option key={op.id} value={op.id}>
+                      {op.code} - {op.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Selecionar Loja / Cliente</label>
+                <select
+                  value={selectedStore}
+                  onChange={(e) => setSelectedStore(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
+                >
+                  <option value="all">Todas as Lojas ({stores.length})</option>
+                  {stores.map((st) => (
+                    <option key={st.id} value={st.name}>
+                      {st.code} - {st.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
 
-          {reportType === 'store' && (
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">Selecionar Loja / Cliente</label>
-              <select
-                value={selectedStore}
-                onChange={(e) => setSelectedStore(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-              >
-                <option value="all">Todas as Lojas ({stores.length})</option>
-                {stores.map((st) => (
-                  <option key={st.id} value={st.name}>
-                    {st.code} - {st.name}
-                  </option>
-                ))}
-              </select>
+          {/* Date Picker / Date Mode */}
+          <div className="md:col-span-5">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700">Filtro de Data</label>
+              <div className="flex items-center gap-1 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setDateMode('all_time')}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                    dateMode === 'all_time' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Todas as Datas
+                </button>
+                <span className="text-slate-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setDateMode('single')}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                    dateMode === 'single' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Data Única
+                </button>
+                <span className="text-slate-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setDateMode('range')}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                    dateMode === 'range' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Período
+                </button>
+              </div>
             </div>
-          )}
 
-          {/* Date Picker Input */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1.5">Data de Produção</label>
-            <input
-              type="date"
-              value={singleDate}
-              onChange={(e) => setSingleDate(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-            />
+            {dateMode === 'all_time' ? (
+              <div className="px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600 text-[18px]">event_available</span>
+                <span>Exibindo histórico completo (sem restrição de data de produção)</span>
+              </div>
+            ) : dateMode === 'single' ? (
+              <input
+                type="date"
+                value={singleDate}
+                onChange={(e) => setSingleDate(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
+              />
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
+                />
+              </div>
+            )}
           </div>
 
           {/* Search Input */}
-          <div>
+          <div className="md:col-span-3">
             <label className="block text-xs font-bold text-slate-700 mb-1.5">Buscar Ordem / Item</label>
             <div className="relative">
               <span className="material-symbols-outlined text-slate-400 absolute left-3.5 top-[12px] text-[18px]">
@@ -906,6 +1081,82 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+          </div>
+        </div>
+
+        {/* 3. Status Filter Pills */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider text-[11px]">
+              Status das Ordens:
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('open')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                  statusFilter === 'open'
+                    ? 'bg-amber-500 text-white border-amber-600 shadow-sm shadow-amber-500/30'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-current" />
+                <span>Em Aberto (Pendentes + Em Montagem)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  statusFilter === 'all'
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>Todos os Status</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter('pending')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  statusFilter === 'pending'
+                    ? 'bg-slate-600 text-white border-slate-700 shadow-sm'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>Apenas Aguardando (0%)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter('in_progress')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  statusFilter === 'in_progress'
+                    ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>Apenas Em Montagem</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter('completed')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                  statusFilter === 'completed'
+                    ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>Apenas Concluídos (100%)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick status summary badge */}
+          <div className="text-xs font-bold text-slate-500">
+            Encontradas: <span className="text-slate-900 font-extrabold">{filteredOrders.length} ordens</span> ({totalItems} peças)
           </div>
         </div>
       </div>
@@ -1093,169 +1344,203 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         )}
       </div>
 
-      {/* Official Factory Printable Ficha de Produção (Modelo Imprimir - Hidden on Screen, Printed/Exported directly) */}
-      <div id="printable-report-content" className="print-container hidden print:block bg-slate-300 p-2 text-slate-900">
-        <div className="border-2 border-slate-900 bg-slate-300 p-3 rounded-lg font-sans text-slate-900 space-y-3">
-          {/* Header Box */}
-          <div className="bg-slate-200 border-2 border-slate-900 pt-3 pb-0 px-3 text-center rounded-md space-y-1 overflow-hidden">
-            <div className="flex justify-center mb-1">
-              <TrindadeLogo variant="light-bg" />
-            </div>
-            <h1 className="text-lg font-black uppercase tracking-widest text-slate-900 my-1">
-              PRODUÇÃO
-            </h1>
-            <div className="bg-slate-500 text-white font-black text-xs py-1.5 text-center border-t-2 border-slate-900 -mx-3">
-              {formatProductionDate(singleDate)}
-            </div>
-          </div>
-
-          {/* Operator Groups */}
-          {groupedByOperator.length === 0 ? (
-            <div className="p-8 text-center bg-white border-2 border-slate-900 rounded-lg text-slate-500 font-medium">
-              Nenhuma ordem de montagem encontrada para a data ou filtros selecionados.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {groupedByOperator.map((group) => (
-                <div key={group.name} className="border-2 border-slate-900 bg-white overflow-hidden rounded-md">
-                  {/* Operator Header Banner */}
-                  <div className="bg-[#346294] text-white font-black text-center py-1.5 px-3 uppercase tracking-wider text-xs border-b-2 border-slate-900">
-                    {group.name} {getDayOfWeekName(singleDate)}
-                  </div>
-
-                  {/* Items Table */}
-                  <table className="w-full text-left border-collapse text-xs">
-                    <tbody className="divide-y divide-slate-400 font-sans">
-                      {group.orders.map((ord, idx) => {
-                        const storeName = ord.store?.trim() || '';
-                        const orderId = ord.orderId?.trim() || '';
-
-                        let storeAndOpPrefix = '';
-                        if (storeName && orderId) {
-                          const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
-                          storeAndOpPrefix = `(${storeName} - ${opLabel}) `;
-                        } else if (storeName) {
-                          storeAndOpPrefix = `(${storeName}) `;
-                        } else if (orderId) {
-                          const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
-                          storeAndOpPrefix = `(${opLabel}) `;
-                        }
-
-                        const qty = ord.quantity || 1;
-                        const qtyPrefix = `${qty}x `;
-                        
-                        let cleanDesc = (ord.itemDescription || '').trim();
-                        // Remove duplicated store or OP in parenthesis if already at beginning of description
-                        if (storeName && cleanDesc.toLowerCase().startsWith(`(${storeName.toLowerCase()}`)) {
-                          const closingParen = cleanDesc.indexOf(')');
-                          if (closingParen !== -1) {
-                            cleanDesc = cleanDesc.slice(closingParen + 1).trim();
-                          }
-                        }
-                        // Remove any existing/repeated quantity prefixes at the beginning like "1x ", "1X ", "2 x ", "1 - ", etc.
-                        cleanDesc = cleanDesc.replace(/^(\d+\s*[xX\-]\s*)+/, '').trim();
-
-                        return (
-                          <tr key={ord.id || idx}>
-                            <td className="p-2 pl-3 font-bold text-slate-900 text-xs">
-                              {storeAndOpPrefix && <span className="font-black text-slate-900">{storeAndOpPrefix}</span>}
-                              <span className="font-extrabold text-slate-900">{qtyPrefix}</span>
-                              <span>{cleanDesc}</span>
-                            </td>
-                            <td className="p-2 pr-3 text-right font-black text-slate-900 text-sm whitespace-nowrap w-16">
-                              {qty}
-                            </td>
-                          </tr>
-                        );
-                      })}
-
-                      {/* Soma Row */}
-                      <tr className="bg-slate-200 font-black border-t-2 border-slate-900 text-xs">
-                        <td className="p-2 pl-3 text-slate-900 uppercase">Soma</td>
-                        <td className="p-2 pr-3 text-right text-slate-900">{group.totalQty}</td>
-                      </tr>
-
-                      {/* Checklist Row */}
-                      <tr className="bg-slate-100 font-bold text-[10px] text-slate-800 border-t border-slate-400">
-                        <td colSpan={2} className="p-2 text-center uppercase tracking-wider">
-                          LIMPEZA:( &nbsp;&nbsp; ) &nbsp;&nbsp;&nbsp;&nbsp; ORGANIZAÇÃO:( &nbsp;&nbsp; ) &nbsp;&nbsp;&nbsp;&nbsp; DISCIPLINA:( &nbsp;&nbsp; )
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Interactive Print Preview & PDF Modal (Solves iframe print dialog restrictions) */}
-      {isPrintModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto no-print">
-          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="bg-slate-900 text-white p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
+      {/* Official Factory Printable Ficha de Produção ou Relatório de Loja (Modelo Imprimir - Hidden on Screen, Printed/Exported directly) */}
+      <div id="printable-report-content" className="print-container hidden print:block bg-white p-2 text-slate-900">
+        {reportType === 'store' ? (
+          <div className="border-2 border-slate-900 bg-white p-4 rounded-lg font-sans text-slate-900 space-y-4">
+            {/* Header Box */}
+            <div className="flex items-center justify-between border-b-2 border-slate-900 pb-3 gap-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-600/30 border border-blue-500/40 text-blue-300 rounded-xl">
-                  <span className="material-symbols-outlined text-[20px]">print</span>
-                </div>
+                <TrindadeLogo variant="light-bg" />
                 <div>
-                  <h3 className="font-bold text-sm text-white">Ficha de Produção Pronta para Impressão</h3>
-                  <p className="text-xs text-slate-400">Trindade Esquadrias - Modelo Oficial de Fábrica</p>
+                  <h1 className="text-base font-black uppercase tracking-wider text-slate-900 leading-tight">
+                    TRINDADE ESQUADRIAS DE ALUMÍNIO
+                  </h1>
+                  <p className="text-xs font-bold text-blue-900 uppercase">
+                    RELATÓRIO DE ORDENS POR LOJA / CLIENTE
+                  </p>
                 </div>
               </div>
-
-              <button
-                type="button"
-                onClick={() => setIsPrintModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            {/* Banner Notice about PDF saving */}
-            <div className="px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">info</span>
-                <span>
-                  <strong>Dica para Impressão / PDF:</strong> Selecione a impressora ou escolha <strong>&quot;Salvar como PDF&quot;</strong>.
+              <div className="text-right text-[11px] font-bold text-slate-700 space-y-0.5">
+                <p>Emissão: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                <p>Emissor: {currentUser?.name || 'Administrador'}</p>
+                <span className="inline-block mt-1 px-2.5 py-0.5 rounded font-black text-[10px] uppercase bg-slate-900 text-white">
+                  {statusFilter === 'open' ? 'ORDENS EM ABERTO' : statusFilter === 'completed' ? 'ORDENS CONCLUÍDAS' : statusFilter === 'in_progress' ? 'EM MONTAGEM' : statusFilter === 'pending' ? 'AGUARDANDO INÍCIO' : 'TODOS OS STATUS'}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleDownloadPrintableHTML}
-                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] shrink-0 cursor-pointer"
-              >
-                Baixar Versão Offline (.HTML)
-              </button>
             </div>
 
-            {/* Document Preview Box */}
-            <div className="p-6 overflow-y-auto bg-slate-300 grow">
-              <div className="border-2 border-slate-900 bg-slate-300 p-4 rounded-xl max-w-2xl mx-auto space-y-3 text-xs shadow-md">
-                {/* Header preview */}
-                <div className="bg-slate-200 border-2 border-slate-900 pt-3 pb-0 px-3 text-center rounded-md space-y-1 overflow-hidden">
-                  <div className="flex justify-center mb-1">
-                    <TrindadeLogo variant="light-bg" />
+            {/* Metadata Summary Bar */}
+            <div className="bg-slate-100 border border-slate-300 p-2.5 rounded flex items-center justify-between text-xs font-bold text-slate-800">
+              <div>
+                <span className="text-slate-500 uppercase text-[10px]">Loja Selecionada: </span>
+                <span className="text-slate-900 font-black uppercase text-sm">
+                  {selectedStore === 'all' ? 'TODAS AS LOJAS' : selectedStore}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 uppercase text-[10px]">Filtro de Data: </span>
+                <span>
+                  {dateMode === 'all_time' ? 'Histórico Completo (Todas as datas)' : dateMode === 'single' ? formatDateDisplay(singleDate) : `${formatDateDisplay(startDate)} a ${formatDateDisplay(endDate)}`}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 uppercase text-[10px]">Total de Ordens: </span>
+                <span className="font-black text-blue-900">{filteredOrders.length} ordens ({totalItems} peças)</span>
+              </div>
+            </div>
+
+            {/* Store Groups */}
+            {groupedByStore.length === 0 ? (
+              <div className="p-8 text-center bg-slate-50 border border-slate-300 rounded text-slate-500 font-bold text-xs">
+                Nenhuma ordem encontrada para os filtros selecionados.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {groupedByStore.map((storeGroup) => (
+                  <div key={storeGroup.name} className="border border-slate-400 rounded overflow-hidden avoid-break">
+                    {/* Store Title Banner */}
+                    <div className="bg-slate-800 text-white px-3 py-1.5 font-black text-xs uppercase flex items-center justify-between">
+                      <span>LOJA: {storeGroup.name}</span>
+                      <span className="text-[11px] font-bold text-slate-300">
+                        {storeGroup.orders.length} ordens | {storeGroup.totalQty} peças
+                        {statusFilter !== 'open' && ` (${storeGroup.openQty} em aberto)`}
+                      </span>
+                    </div>
+
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-800 font-black text-[10px] uppercase border-b border-slate-300">
+                          <th className="p-2 border-r border-slate-300 w-24">Nº OP</th>
+                          <th className="p-2 border-r border-slate-300">Descrição da Esquadria / Peça</th>
+                          <th className="p-2 border-r border-slate-300 text-center w-14">Qtd</th>
+                          <th className="p-2 border-r border-slate-300 w-36">Montador</th>
+                          <th className="p-2 border-r border-slate-300 text-center w-28">Data Prog.</th>
+                          <th className="p-2 text-center w-28">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-300 font-medium">
+                        {storeGroup.orders.map((ord) => {
+                          const isDone = ord.progress === 100 || ord.executionStatus === 'concluido';
+                          const inProg = ord.progress > 0 && !isDone;
+                          return (
+                            <tr key={ord.id} className="hover:bg-slate-50">
+                              <td className="p-2 border-r border-slate-300 font-black text-slate-900 whitespace-nowrap">
+                                {ord.orderId}
+                              </td>
+                              <td className="p-2 border-r border-slate-300 font-bold text-slate-800">
+                                {ord.itemDescription}
+                                {ord.delayReason && (
+                                  <div className="text-[10px] text-red-700 font-semibold mt-0.5">
+                                    Motivo atraso: {ord.delayReason}
+                                  </div>
+                                )}
+                                {ord.pendingReason && (
+                                  <div className="text-[10px] text-amber-800 font-semibold mt-0.5">
+                                    Motivo pendência: {ord.pendingReason}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-2 border-r border-slate-300 text-center font-black text-slate-900">
+                                {ord.quantity || 1}
+                              </td>
+                              <td className="p-2 border-r border-slate-300 text-slate-700 font-semibold">
+                                {ord.assignedOperatorName || ord.assignedOperatorCode ? (
+                                  `${ord.assignedOperatorCode ? `[${ord.assignedOperatorCode}] ` : ''}${ord.assignedOperatorName || ''}`
+                                ) : (
+                                  <span className="text-slate-400 italic">Não atribuído</span>
+                                )}
+                              </td>
+                              <td className="p-2 border-r border-slate-300 text-center font-bold text-slate-800 whitespace-nowrap">
+                                {ord.productionDate ? formatDateDisplay(ord.productionDate) : 'Aguardando Data'}
+                              </td>
+                              <td className="p-2 text-center font-black text-[11px] whitespace-nowrap">
+                                {isDone ? (
+                                  <span className="text-emerald-700 font-bold">Concluído (100%)</span>
+                                ) : inProg ? (
+                                  <span className="text-blue-700 font-bold">Em Montagem ({ord.progress}%)</span>
+                                ) : (
+                                  <span className="text-amber-800 font-bold">Aguardando (0%)</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {/* Store Subtotal */}
+                        <tr className="bg-slate-200 font-black text-xs border-t-2 border-slate-800">
+                          <td colSpan={2} className="p-2 uppercase text-slate-900">
+                            Subtotal Loja {storeGroup.name}
+                          </td>
+                          <td className="p-2 text-center text-slate-900 font-black">
+                            {storeGroup.totalQty}
+                          </td>
+                          <td colSpan={3} className="p-2 text-right text-slate-800 text-[11px]">
+                            {storeGroup.orders.length} ordens ({storeGroup.openQty} peças em aberto)
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                  <h2 className="text-lg font-black uppercase tracking-widest text-slate-900 my-1">
-                    PRODUÇÃO
-                  </h2>
-                  <div className="bg-slate-500 text-white font-black text-xs py-1.5 text-center border-t-2 border-slate-900 -mx-3">
-                    {formatProductionDate(singleDate)}
+                ))}
+              </div>
+            )}
+
+            {/* Grand Totals & Signature Section */}
+            <div className="bg-slate-100 border-2 border-slate-900 p-3 rounded space-y-3 avoid-break">
+              <div className="flex items-center justify-between text-xs font-black text-slate-900 border-b border-slate-300 pb-2">
+                <span className="uppercase">TOTAL GERAL DO RELATÓRIO:</span>
+                <span>
+                  {filteredOrders.length} Ordens | {totalItems} Peças / Esquadrias
+                  {statusFilter === 'open' && ' EM ABERTO'}
+                </span>
+              </div>
+
+              <div className="pt-6 pb-2 grid grid-cols-2 gap-8 text-center text-xs font-bold text-slate-700">
+                <div>
+                  <div className="border-t border-slate-700 pt-1.5 mx-4">
+                    Visto do PCP / Fábrica Trindade
                   </div>
                 </div>
+                <div>
+                  <div className="border-t border-slate-700 pt-1.5 mx-4">
+                    Recebido por Loja / Logística
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="border-2 border-slate-900 bg-slate-300 p-3 rounded-lg font-sans text-slate-900 space-y-3">
+            {/* Header Box */}
+            <div className="bg-slate-200 border-2 border-slate-900 pt-3 pb-0 px-3 text-center rounded-md space-y-1 overflow-hidden">
+              <div className="flex justify-center mb-1">
+                <TrindadeLogo variant="light-bg" />
+              </div>
+              <h1 className="text-lg font-black uppercase tracking-widest text-slate-900 my-1">
+                PRODUÇÃO
+              </h1>
+              <div className="bg-slate-500 text-white font-black text-xs py-1.5 text-center border-t-2 border-slate-900 -mx-3">
+                {formatProductionDate(singleDate)}
+              </div>
+            </div>
 
-                {/* Groups preview */}
+            {/* Operator Groups */}
+            {groupedByOperator.length === 0 ? (
+              <div className="p-8 text-center bg-white border-2 border-slate-900 rounded-lg text-slate-500 font-medium">
+                Nenhuma ordem de montagem encontrada para a data ou filtros selecionados.
+              </div>
+            ) : (
+              <div className="space-y-3">
                 {groupedByOperator.map((group) => (
                   <div key={group.name} className="border-2 border-slate-900 bg-white overflow-hidden rounded-md">
-                    <div className="bg-[#346294] text-white font-black text-center py-1.5 px-3 uppercase text-xs border-b-2 border-slate-900 tracking-wider">
+                    {/* Operator Header Banner */}
+                    <div className="bg-[#346294] text-white font-black text-center py-1.5 px-3 uppercase tracking-wider text-xs border-b-2 border-slate-900">
                       {group.name} {getDayOfWeekName(singleDate)}
                     </div>
-                    <table className="w-full text-left border-collapse text-xs font-sans">
-                      <tbody className="divide-y divide-slate-400">
+
+                    {/* Items Table */}
+                    <table className="w-full text-left border-collapse text-xs">
+                      <tbody className="divide-y divide-slate-400 font-sans">
                         {group.orders.map((ord, idx) => {
                           const storeName = ord.store?.trim() || '';
                           const orderId = ord.orderId?.trim() || '';
@@ -1287,19 +1572,25 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
 
                           return (
                             <tr key={ord.id || idx}>
-                              <td className="p-2 pl-3 font-bold text-slate-900">
+                              <td className="p-2 pl-3 font-bold text-slate-900 text-xs">
                                 {storeAndOpPrefix && <span className="font-black text-slate-900">{storeAndOpPrefix}</span>}
                                 <span className="font-extrabold text-slate-900">{qtyPrefix}</span>
                                 <span>{cleanDesc}</span>
                               </td>
-                              <td className="p-2 pr-3 text-right font-black text-slate-900 w-16 whitespace-nowrap">{qty}</td>
+                              <td className="p-2 pr-3 text-right font-black text-slate-900 text-sm whitespace-nowrap w-16">
+                                {qty}
+                              </td>
                             </tr>
                           );
                         })}
+
+                        {/* Soma Row */}
                         <tr className="bg-slate-200 font-black border-t-2 border-slate-900 text-xs">
                           <td className="p-2 pl-3 text-slate-900 uppercase">Soma</td>
                           <td className="p-2 pr-3 text-right text-slate-900">{group.totalQty}</td>
                         </tr>
+
+                        {/* Checklist Row */}
                         <tr className="bg-slate-100 font-bold text-[10px] text-slate-800 border-t border-slate-400">
                           <td colSpan={2} className="p-2 text-center uppercase tracking-wider">
                             LIMPEZA:( &nbsp;&nbsp; ) &nbsp;&nbsp;&nbsp;&nbsp; ORGANIZAÇÃO:( &nbsp;&nbsp; ) &nbsp;&nbsp;&nbsp;&nbsp; DISCIPLINA:( &nbsp;&nbsp; )
@@ -1310,11 +1601,295 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                   </div>
                 ))}
               </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Interactive Print Preview & PDF Modal (Solves iframe print dialog restrictions) */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto no-print">
+          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-slate-900 text-white p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-600/30 border border-blue-500/40 text-blue-300 rounded-xl">
+                  <span className="material-symbols-outlined text-[20px]">print</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">
+                    {reportType === 'store'
+                      ? 'Relatório por Loja / Cliente Pronto para Impressão'
+                      : 'Ficha de Produção Pronta para Impressão'}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {reportType === 'store'
+                      ? 'Trindade Esquadrias - Relatório de Ordens por Loja'
+                      : 'Trindade Esquadrias - Modelo Oficial de Fábrica'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsPrintModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Banner Notice about PDF saving */}
+            <div className="px-5 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">info</span>
+                <span>
+                  <strong>Dica para Impressão / PDF:</strong> Selecione a impressora ou escolha <strong>&quot;Salvar como PDF&quot;</strong>.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadPrintableHTML}
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] shrink-0 cursor-pointer"
+              >
+                Baixar Versão Offline (.HTML)
+              </button>
+            </div>
+
+            {/* Document Preview Box */}
+            <div className="p-6 overflow-y-auto bg-slate-200 grow">
+              {reportType === 'store' ? (
+                <div className="border-2 border-slate-900 bg-white p-4 rounded-xl max-w-3xl mx-auto space-y-4 text-xs shadow-md">
+                  {/* Header preview */}
+                  <div className="flex items-center justify-between border-b-2 border-slate-900 pb-3 gap-4">
+                    <div className="flex items-center gap-3">
+                      <TrindadeLogo variant="light-bg" />
+                      <div>
+                        <h2 className="text-base font-black uppercase tracking-wider text-slate-900 leading-tight">
+                          TRINDADE ESQUADRIAS DE ALUMÍNIO
+                        </h2>
+                        <p className="text-xs font-bold text-blue-900 uppercase">
+                          RELATÓRIO DE ORDENS POR LOJA / CLIENTE
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right text-[11px] font-bold text-slate-700 space-y-0.5">
+                      <p>Emissão: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                      <span className="inline-block px-2 py-0.5 rounded font-black text-[10px] uppercase bg-slate-900 text-white">
+                        {statusFilter === 'open' ? 'ORDENS EM ABERTO' : statusFilter === 'completed' ? 'ORDENS CONCLUÍDAS' : statusFilter === 'in_progress' ? 'EM MONTAGEM' : statusFilter === 'pending' ? 'AGUARDANDO INÍCIO' : 'TODOS OS STATUS'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Metadata bar preview */}
+                  <div className="bg-slate-100 border border-slate-300 p-2.5 rounded flex items-center justify-between text-xs font-bold text-slate-800">
+                    <div>
+                      <span className="text-slate-500 uppercase text-[10px]">Loja: </span>
+                      <span className="text-slate-900 font-black uppercase">
+                        {selectedStore === 'all' ? 'TODAS AS LOJAS' : selectedStore}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 uppercase text-[10px]">Filtro de Data: </span>
+                      <span>
+                        {dateMode === 'all_time' ? 'Histórico Completo' : dateMode === 'single' ? formatDateDisplay(singleDate) : `${formatDateDisplay(startDate)} a ${formatDateDisplay(endDate)}`}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 uppercase text-[10px]">Total: </span>
+                      <span className="font-black text-blue-900">{filteredOrders.length} ordens ({totalItems} peças)</span>
+                    </div>
+                  </div>
+
+                  {/* Store Groups preview */}
+                  {groupedByStore.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 border border-slate-300 rounded text-slate-500 font-bold">
+                      Nenhuma ordem encontrada para os filtros selecionados.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {groupedByStore.map((storeGroup) => (
+                        <div key={storeGroup.name} className="border border-slate-400 rounded overflow-hidden">
+                          <div className="bg-slate-800 text-white px-3 py-1.5 font-black text-xs uppercase flex items-center justify-between">
+                            <span>LOJA: {storeGroup.name}</span>
+                            <span className="text-[11px] font-bold text-slate-300">
+                              {storeGroup.orders.length} ordens | {storeGroup.totalQty} peças
+                            </span>
+                          </div>
+
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-100 text-slate-800 font-black text-[10px] uppercase border-b border-slate-300">
+                                <th className="p-2 border-r border-slate-300 w-24">Nº OP</th>
+                                <th className="p-2 border-r border-slate-300">Descrição da Esquadria / Peça</th>
+                                <th className="p-2 border-r border-slate-300 text-center w-14">Qtd</th>
+                                <th className="p-2 border-r border-slate-300 w-36">Montador</th>
+                                <th className="p-2 border-r border-slate-300 text-center w-28">Data Prog.</th>
+                                <th className="p-2 text-center w-28">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-300 font-medium">
+                              {storeGroup.orders.map((ord) => {
+                                const isDone = ord.progress === 100 || ord.executionStatus === 'concluido';
+                                const inProg = ord.progress > 0 && !isDone;
+                                return (
+                                  <tr key={ord.id} className="hover:bg-slate-50">
+                                    <td className="p-2 border-r border-slate-300 font-black text-slate-900 whitespace-nowrap">
+                                      {ord.orderId}
+                                    </td>
+                                    <td className="p-2 border-r border-slate-300 font-bold text-slate-800">
+                                      {ord.itemDescription}
+                                    </td>
+                                    <td className="p-2 border-r border-slate-300 text-center font-black text-slate-900">
+                                      {ord.quantity || 1}
+                                    </td>
+                                    <td className="p-2 border-r border-slate-300 text-slate-700 font-semibold">
+                                      {ord.assignedOperatorName || ord.assignedOperatorCode ? (
+                                        `${ord.assignedOperatorCode ? `[${ord.assignedOperatorCode}] ` : ''}${ord.assignedOperatorName || ''}`
+                                      ) : (
+                                        <span className="text-slate-400 italic">Não atribuído</span>
+                                      )}
+                                    </td>
+                                    <td className="p-2 border-r border-slate-300 text-center font-bold text-slate-800 whitespace-nowrap">
+                                      {ord.productionDate ? formatDateDisplay(ord.productionDate) : 'Aguardando Data'}
+                                    </td>
+                                    <td className="p-2 text-center font-black text-[11px] whitespace-nowrap">
+                                      {isDone ? (
+                                        <span className="text-emerald-700 font-bold">Concluído</span>
+                                      ) : inProg ? (
+                                        <span className="text-blue-700 font-bold">Em Montagem ({ord.progress}%)</span>
+                                      ) : (
+                                        <span className="text-amber-800 font-bold">Aguardando (0%)</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              <tr className="bg-slate-200 font-black text-xs border-t-2 border-slate-800">
+                                <td colSpan={2} className="p-2 uppercase text-slate-900">
+                                  Subtotal Loja {storeGroup.name}
+                                </td>
+                                <td className="p-2 text-center text-slate-900 font-black">
+                                  {storeGroup.totalQty}
+                                </td>
+                                <td colSpan={3} className="p-2 text-right text-slate-800 text-[11px]">
+                                  {storeGroup.orders.length} ordens ({storeGroup.openQty} em aberto)
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Grand Totals */}
+                  <div className="bg-slate-100 border-2 border-slate-900 p-3 rounded space-y-3">
+                    <div className="flex items-center justify-between text-xs font-black text-slate-900 border-b border-slate-300 pb-2">
+                      <span className="uppercase">TOTAL GERAL DO RELATÓRIO:</span>
+                      <span>{filteredOrders.length} Ordens | {totalItems} Peças / Esquadrias</span>
+                    </div>
+                    <div className="pt-6 pb-2 grid grid-cols-2 gap-8 text-center text-xs font-bold text-slate-700">
+                      <div>
+                        <div className="border-t border-slate-700 pt-1.5 mx-4">
+                          Visto do PCP / Fábrica Trindade
+                        </div>
+                      </div>
+                      <div>
+                        <div className="border-t border-slate-700 pt-1.5 mx-4">
+                          Recebido por Loja / Logística
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="border-2 border-slate-900 bg-slate-300 p-4 rounded-xl max-w-2xl mx-auto space-y-3 text-xs shadow-md">
+                  {/* Header preview */}
+                  <div className="bg-slate-200 border-2 border-slate-900 pt-3 pb-0 px-3 text-center rounded-md space-y-1 overflow-hidden">
+                    <div className="flex justify-center mb-1">
+                      <TrindadeLogo variant="light-bg" />
+                    </div>
+                    <h2 className="text-lg font-black uppercase tracking-widest text-slate-900 my-1">
+                      PRODUÇÃO
+                    </h2>
+                    <div className="bg-slate-500 text-white font-black text-xs py-1.5 text-center border-t-2 border-slate-900 -mx-3">
+                      {formatProductionDate(singleDate)}
+                    </div>
+                  </div>
+
+                  {/* Groups preview */}
+                  {groupedByOperator.map((group) => (
+                    <div key={group.name} className="border-2 border-slate-900 bg-white overflow-hidden rounded-md">
+                      <div className="bg-[#346294] text-white font-black text-center py-1.5 px-3 uppercase text-xs border-b-2 border-slate-900 tracking-wider">
+                        {group.name} {getDayOfWeekName(singleDate)}
+                      </div>
+                      <table className="w-full text-left border-collapse text-xs font-sans">
+                        <tbody className="divide-y divide-slate-400">
+                          {group.orders.map((ord, idx) => {
+                            const storeName = ord.store?.trim() || '';
+                            const orderId = ord.orderId?.trim() || '';
+
+                            let storeAndOpPrefix = '';
+                            if (storeName && orderId) {
+                              const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
+                              storeAndOpPrefix = `(${storeName} - ${opLabel}) `;
+                            } else if (storeName) {
+                              storeAndOpPrefix = `(${storeName}) `;
+                            } else if (orderId) {
+                              const opLabel = orderId.toUpperCase().startsWith('OP') ? orderId : `OP: ${orderId}`;
+                              storeAndOpPrefix = `(${opLabel}) `;
+                            }
+
+                            const qty = ord.quantity || 1;
+                            const qtyPrefix = `${qty}x `;
+                            
+                            let cleanDesc = (ord.itemDescription || '').trim();
+                            // Remove duplicated store or OP in parenthesis if already at beginning of description
+                            if (storeName && cleanDesc.toLowerCase().startsWith(`(${storeName.toLowerCase()}`)) {
+                              const closingParen = cleanDesc.indexOf(')');
+                              if (closingParen !== -1) {
+                                cleanDesc = cleanDesc.slice(closingParen + 1).trim();
+                              }
+                            }
+                            // Remove any existing/repeated quantity prefixes at the beginning like "1x ", "1X ", "2 x ", "1 - ", etc.
+                            cleanDesc = cleanDesc.replace(/^(\d+\s*[xX\-]\s*)+/, '').trim();
+
+                            return (
+                              <tr key={ord.id || idx}>
+                                <td className="p-2 pl-3 font-bold text-slate-900">
+                                  {storeAndOpPrefix && <span className="font-black text-slate-900">{storeAndOpPrefix}</span>}
+                                  <span className="font-extrabold text-slate-900">{qtyPrefix}</span>
+                                  <span>{cleanDesc}</span>
+                                </td>
+                                <td className="p-2 pr-3 text-right font-black text-slate-900 w-16 whitespace-nowrap">{qty}</td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-slate-200 font-black border-t-2 border-slate-900 text-xs">
+                            <td className="p-2 pl-3 text-slate-900 uppercase">Soma</td>
+                            <td className="p-2 pr-3 text-right text-slate-900">{group.totalQty}</td>
+                          </tr>
+                          <tr className="bg-slate-100 font-bold text-[10px] text-slate-800 border-t border-slate-400">
+                            <td colSpan={2} className="p-2 text-center uppercase tracking-wider">
+                              LIMPEZA:( &nbsp;&nbsp; ) &nbsp;&nbsp;&nbsp;&nbsp; ORGANIZAÇÃO:( &nbsp;&nbsp; ) &nbsp;&nbsp;&nbsp;&nbsp; DISCIPLINA:( &nbsp;&nbsp; )
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
             <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-between items-center text-white text-xs shrink-0">
-              <span className="text-slate-400">Trindade Esquadrias - Ficha de Controle de Produção</span>
+              <span className="text-slate-400">
+                {reportType === 'store'
+                  ? 'Trindade Esquadrias - Relatório de Ordens por Loja'
+                  : 'Trindade Esquadrias - Ficha de Controle de Produção'}
+              </span>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
