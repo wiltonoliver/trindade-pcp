@@ -1,11 +1,17 @@
-import type {Metadata} from 'next';
+/* eslint-disable @next/next/no-page-custom-font */
+import type {Metadata, Viewport} from 'next';
 import './globals.css';
+
+export const viewport: Viewport = {
+  themeColor: '#011627',
+  width: 'device-width',
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: 'Trindade PCP',
   description: 'Sistema de Gestão e Planejamento de Produção Industrial - Trindade Esquadrias',
   manifest: '/manifest.json',
-  themeColor: '#011627',
   icons: {
     icon: '/favicon.svg',
     shortcut: '/favicon.svg',

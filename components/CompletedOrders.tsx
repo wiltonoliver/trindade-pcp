@@ -1,11 +1,17 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { OrderItem, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { BatchLabelModal } from './BatchLabelModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
 import { notifyOrderReopened, notifyOrderDeleted } from '@/lib/notificationService';
+
+const MONTH_NAMES_PT = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+const WEEKDAYS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 interface CompletedOrdersProps {
   orders: OrderItem[];
@@ -23,6 +29,72 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   const [localSearch, setLocalSearch] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('ALL');
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('ALL');
+  const [isCalendarOpen, setIsCalendarOpen] = useState<boolean>(false);
+  const calendarContainerRef = useRef<HTMLDivElement>(null);
+  const calendarInputRef = useRef<HTMLInputElement>(null);
+
+  // Default calendar month/year
+  const [calendarYear, setCalendarYear] = useState<number>(() => new Date().getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => new Date().getMonth());
+
+  // Convert calendar date (YYYY-MM-DD) to Brazilian date format (DD/MM/YYYY)
+  const parseCalendarDateToBR = (val: string): string => {
+    if (!val) return '';
+    const parts = val.split('-');
+    if (parts.length !== 3) return val;
+    const [y, m, d] = parts;
+    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  };
+
+  // Convert Brazilian date format (DD/MM/YYYY) to calendar format (YYYY-MM-DD)
+  const parseBRDateToCalendar = (val: string): string => {
+    if (!val || !val.includes('/')) return '';
+    const parts = val.split('/');
+    if (parts.length !== 3) return '';
+    const [d, m, y] = parts;
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  };
+
+  const handleCalendarDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    if (!rawVal) return;
+    const brFormatted = parseCalendarDateToBR(rawVal);
+    setSelectedDateFilter(brFormatted);
+  };
+
+  // Sync calendar month/year when selectedDateFilter is updated
+  useEffect(() => {
+    if (selectedDateFilter && selectedDateFilter.includes('/')) {
+      const parts = selectedDateFilter.split('/');
+      if (parts.length === 3) {
+        const m = parseInt(parts[1], 10) - 1;
+        const y = parseInt(parts[2], 10);
+        if (!isNaN(m) && !isNaN(y) && m >= 0 && m <= 11) {
+          setCalendarMonth(m);
+          setCalendarYear(y);
+        }
+      }
+    }
+  }, [selectedDateFilter]);
+
+  // Click outside to close calendar
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (calendarContainerRef.current && !calendarContainerRef.current.contains(event.target as Node)) {
+        setIsCalendarOpen(false);
+      }
+    };
+    if (isCalendarOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isCalendarOpen]);
+
+  const openCalendarPicker = () => {
+    setIsCalendarOpen(true);
+  };
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'concluido' | 'encerrado'>('ALL');
   const [selectedOrderIdsForBatch, setSelectedOrderIdsForBatch] = useState<string[]>([]);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
@@ -95,6 +167,53 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
     return stores.sort();
   }, [completedOrders]);
 
+  // Pre-calculate completed order counts by clean date (DD/MM/YYYY)
+  const completedOrdersCountByDate = useMemo(() => {
+    const counts: Record<string, number> = {};
+    completedOrders.forEach((ord) => {
+      const d = getCleanDateOnly(ord);
+      if (d) {
+        counts[d] = (counts[d] || 0) + 1;
+      }
+      const compD = getCompletionDate(ord);
+      if (compD && compD.includes('/')) {
+        const justD = compD.split(' ')[0].trim();
+        if (justD && !counts[justD]) {
+          counts[justD] = 1;
+        }
+      }
+    });
+    return counts;
+  }, [completedOrders]);
+
+  const daysInMonth = useMemo(() => {
+    return new Date(calendarYear, calendarMonth + 1, 0).getDate();
+  }, [calendarYear, calendarMonth]);
+
+  const firstDayOfWeek = useMemo(() => {
+    return new Date(calendarYear, calendarMonth, 1).getDay(); // 0 is Sunday
+  }, [calendarYear, calendarMonth]);
+
+  const handlePrevMonth = () => {
+    setCalendarMonth((prev) => {
+      if (prev === 0) {
+        setCalendarYear((y) => y - 1);
+        return 11;
+      }
+      return prev - 1;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setCalendarMonth((prev) => {
+      if (prev === 11) {
+        setCalendarYear((y) => y + 1);
+        return 0;
+      }
+      return prev + 1;
+    });
+  };
+
   // Apply search, store & date filters
   const filteredCompletedOrders = useMemo(() => {
     const query = (localSearch || externalSearchQuery).toLowerCase().trim();
@@ -115,9 +234,10 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
       // Date filter
       if (selectedDateFilter !== 'ALL') {
         const cleanD = getCleanDateOnly(ord);
+        const compD = getCompletionDate(ord);
         if (selectedDateFilter === 'TODAY') {
-          if (cleanD !== todayStr && !getCompletionDate(ord).includes(todayStr)) return false;
-        } else if (cleanD !== selectedDateFilter) {
+          if (cleanD !== todayStr && !compD.includes(todayStr)) return false;
+        } else if (cleanD !== selectedDateFilter && !compD.includes(selectedDateFilter)) {
           return false;
         }
       }
@@ -321,15 +441,34 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
         </div>
 
         {/* Date Filter */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-xs font-bold text-slate-500 whitespace-nowrap hidden sm:inline">Data Conclusão:</span>
           <select
             value={selectedDateFilter}
-            onChange={(e) => setSelectedDateFilter(e.target.value)}
-            className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'CUSTOM_CALENDAR') {
+                openCalendarPicker();
+                return;
+              }
+              setSelectedDateFilter(val);
+            }}
+            className={`bg-slate-50 border text-xs font-semibold rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer transition-colors ${
+              selectedDateFilter !== 'ALL' && selectedDateFilter !== 'TODAY'
+                ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 font-bold'
+                : 'border-slate-200 text-slate-700'
+            }`}
           >
             <option value="ALL">Todas as Datas ({completedOrders.length})</option>
             <option value="TODAY">Hoje — {todayStr}</option>
+            <option value="CUSTOM_CALENDAR">📅 Escolher no Calendário...</option>
+            {selectedDateFilter !== 'ALL' &&
+              selectedDateFilter !== 'TODAY' &&
+              !availableDates.includes(selectedDateFilter) && (
+                <option value={selectedDateFilter}>
+                  📅 {selectedDateFilter} (Selecionada no calendário)
+                </option>
+              )}
             {availableDates.map((dateStr) => {
               if (dateStr === todayStr) return null;
               const count = completedOrders.filter((o) => getCleanDateOnly(o) === dateStr).length;
@@ -340,6 +479,192 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
               );
             })}
           </select>
+
+          {/* Calendar Picker Trigger & Popover */}
+          <div ref={calendarContainerRef} className="relative flex items-center">
+            <button
+              type="button"
+              onClick={() => setIsCalendarOpen((prev) => !prev)}
+              aria-label="Abrir calendário para filtrar pedidos concluídos por data"
+              className={`h-[38px] px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+                isCalendarOpen || (selectedDateFilter !== 'ALL' && selectedDateFilter !== 'TODAY')
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/20 ring-2 ring-emerald-500/20'
+                  : 'bg-slate-50 hover:bg-white text-slate-700 border-slate-200 hover:border-emerald-400'
+              }`}
+              title="Clique para abrir o calendário e escolher uma data"
+            >
+              <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+              <span className="hidden sm:inline font-bold">
+                {selectedDateFilter === 'ALL'
+                  ? 'Calendário'
+                  : selectedDateFilter === 'TODAY'
+                  ? 'Hoje'
+                  : selectedDateFilter}
+              </span>
+              <span className="material-symbols-outlined text-[16px] opacity-70">
+                {isCalendarOpen ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+
+            {selectedDateFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedDateFilter('ALL')}
+                className="ml-1 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                title="Limpar filtro de data (Voltar para Todas as Datas)"
+              >
+                <span className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            )}
+
+            {/* Interactive Calendar Popover Dropdown */}
+            {isCalendarOpen && (
+              <div
+                id="completed-orders-calendar-popover"
+                className="absolute top-full mt-2 right-0 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 w-[320px] animate-in fade-in zoom-in-95 duration-150"
+              >
+                {/* Header: Month & Navigation */}
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                  <button
+                    type="button"
+                    onClick={handlePrevMonth}
+                    className="p-1 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center"
+                    title="Mês anterior"
+                  >
+                    <span className="material-symbols-outlined text-lg">chevron_left</span>
+                  </button>
+
+                  <div className="text-center select-none">
+                    <span className="text-sm font-black text-slate-900 capitalize">
+                      {MONTH_NAMES_PT[calendarMonth]}
+                    </span>{' '}
+                    <span className="text-sm font-semibold text-slate-500">{calendarYear}</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleNextMonth}
+                    className="p-1 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer flex items-center justify-center"
+                    title="Próximo mês"
+                  >
+                    <span className="material-symbols-outlined text-lg">chevron_right</span>
+                  </button>
+                </div>
+
+                {/* Weekdays */}
+                <div className="grid grid-cols-7 gap-1 mb-2 text-center select-none">
+                  {WEEKDAYS_PT.map((d, i) => (
+                    <span
+                      key={d}
+                      className={`text-[10px] font-black uppercase tracking-wider ${
+                        i === 0 || i === 6 ? 'text-amber-600' : 'text-slate-400'
+                      }`}
+                    >
+                      {d}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Days Grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Empty padding cells before month start */}
+                  {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
+                    <div key={`blank-${idx}`} className="h-8 w-8" />
+                  ))}
+
+                  {/* Month days */}
+                  {Array.from({ length: daysInMonth }).map((_, idx) => {
+                    const dayNum = idx + 1;
+                    const dayStr = `${String(dayNum).padStart(2, '0')}/${String(calendarMonth + 1).padStart(2, '0')}/${calendarYear}`;
+                    const count = completedOrdersCountByDate[dayStr] || 0;
+                    const isSelected = selectedDateFilter === dayStr;
+                    const isToday = dayStr === todayStr;
+
+                    return (
+                      <button
+                        key={dayStr}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDateFilter(dayStr);
+                          setIsCalendarOpen(false);
+                        }}
+                        className={`h-8 w-8 rounded-lg text-xs font-semibold flex flex-col items-center justify-center relative transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white font-black shadow-md shadow-emerald-600/30'
+                            : isToday
+                            ? 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-300'
+                            : count > 0
+                            ? 'text-slate-900 font-bold hover:bg-emerald-50 hover:text-emerald-700 bg-slate-50/80 border border-slate-100'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }`}
+                        title={`${dayStr}${count > 0 ? ` (${count} peças concluídas)` : ''}`}
+                      >
+                        <span>{dayNum}</span>
+                        {count > 0 && (
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full -mt-0.5 ${
+                              isSelected ? 'bg-amber-300' : 'bg-emerald-600'
+                            }`}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Direct date picker & Quick links */}
+                <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-1.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDateFilter('TODAY');
+                        setIsCalendarOpen(false);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] transition-colors cursor-pointer"
+                    >
+                      Hoje
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDateFilter('ALL');
+                        setIsCalendarOpen(false);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition-colors cursor-pointer"
+                    >
+                      Todas as Datas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsCalendarOpen(false)}
+                      className="px-2 py-1 rounded-lg text-slate-500 hover:text-slate-800 font-semibold text-[11px] transition-colors cursor-pointer ml-auto"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-50">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">
+                      Ou digite:
+                    </span>
+                    <input
+                      ref={calendarInputRef}
+                      type="date"
+                      value={parseBRDateToCalendar(selectedDateFilter)}
+                      onChange={(e) => {
+                        handleCalendarDateChange(e);
+                        if (e.target.value) {
+                          setIsCalendarOpen(false);
+                        }
+                      }}
+                      className="w-full px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Store selector */}
