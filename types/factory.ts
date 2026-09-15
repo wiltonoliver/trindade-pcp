@@ -91,6 +91,8 @@ export interface OrderItem {
   isClosedUncompleted?: boolean;
   closedAt?: string;
   closedBy?: string;
+  completedAt?: string; // Data de conclusão definida pelo gerente (DD/MM/AAAA)
+  completedBy?: string;
 }
 
 export interface ProblemHistoryItem {

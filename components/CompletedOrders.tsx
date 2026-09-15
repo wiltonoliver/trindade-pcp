@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { OrderItem, UserProfile, OrderStatusHistoryLog } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
 import { BatchLabelModal } from './BatchLabelModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
 import { notifyOrderReopened, notifyOrderDeleted } from '@/lib/notificationService';
+import { extractDMYDate } from '@/lib/dateUtils';
 
 const MONTH_NAMES_PT = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -113,53 +114,87 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
     );
   }, [orders]);
 
-  // Helper to format completion date from history
-  const getCompletionDate = (ord: OrderItem) => {
-    if (ord.isClosedUncompleted) {
-      if (ord.closedAt) return ord.closedAt;
-      const closedLog = ord.statusHistory?.find(
-        (h) => h.status === 'encerrado_nao_produzido' || h.note?.includes('NÃO CONCLUÍDO (Encerrado')
-      );
-      if (closedLog && closedLog.timestamp) return closedLog.timestamp;
-      return 'Encerrado (Não Concluído)';
-    }
-    const log = ord.statusHistory?.find((h) => h.status === 'concluido');
-    if (log && log.timestamp) return log.timestamp;
-    if (ord.productionDate && ord.productionDate !== 'Aguardando Data') return ord.productionDate;
-    return '100% Concluído';
-  };
-
-  // Helper to extract clean DD/MM/YYYY date
-  const getCleanDateOnly = (ord: OrderItem) => {
-    if (ord.closedAt) {
-      const match = ord.closedAt.match(/\d{2}\/\d{2}\/\d{4}/);
-      if (match) return match[0];
-    }
-    const log = ord.statusHistory?.find(
-      (h) => h.status === 'concluido' || h.status === 'encerrado_nao_produzido'
-    );
-    if (log && log.timestamp) {
-      const match = log.timestamp.match(/\d{2}\/\d{2}\/\d{4}/);
-      if (match) return match[0];
-    }
-    if (ord.productionDate && ord.productionDate.includes('/')) {
-      const match = ord.productionDate.match(/\d{2}\/\d{2}\/\d{4}/);
-      if (match) return match[0];
-    }
-    return '';
-  };
-
   const todayStr = useMemo(() => new Date().toLocaleDateString('pt-BR'), []);
 
-  // Extract unique completion dates for dropdown
+  // Helper to format completion date from manager input or status history in DD/MM/YYYY
+  const getCompletionDate = useCallback((ord: OrderItem): string => {
+    // 1. Data explicitamente informada ou salva pelo gerente (completedAt)
+    if (ord.completedAt) {
+      const d = extractDMYDate(ord.completedAt);
+      if (d) return d;
+    }
+
+    // 2. Histórico de status: log onde o status foi alterado para concluído
+    const completedLog = ord.statusHistory?.find(
+      (h) => h.status === 'concluido' || (h.actionType === 'status_update' && h.status === 'concluido')
+    );
+    if (completedLog) {
+      if (completedLog.timestamp) {
+        const d = extractDMYDate(completedLog.timestamp);
+        if (d) return d;
+      }
+      if (completedLog.note) {
+        const d = extractDMYDate(completedLog.note);
+        if (d) return d;
+      }
+    }
+
+    // 3. Caso tenha sido encerrado sem produzir
+    if (ord.isClosedUncompleted) {
+      if (ord.closedAt) {
+        const d = extractDMYDate(ord.closedAt);
+        if (d) return d;
+      }
+      const closedLog = ord.statusHistory?.find(
+        (h) => h.status === 'encerrado_nao_produzido' || h.note?.includes('NÃO CONCLUÍDO')
+      );
+      if (closedLog && closedLog.timestamp) {
+        const d = extractDMYDate(closedLog.timestamp);
+        if (d) return d;
+      }
+    }
+
+    // 4. Qualquer log com data válida no histórico
+    if (ord.statusHistory && ord.statusHistory.length > 0) {
+      for (const log of ord.statusHistory) {
+        if (log.timestamp) {
+          const d = extractDMYDate(log.timestamp);
+          if (d) return d;
+        }
+      }
+    }
+
+    // 5. Data de produção cadastrada
+    if (ord.productionDate && ord.productionDate !== 'Aguardando Data') {
+      const d = extractDMYDate(ord.productionDate);
+      if (d) return d;
+    }
+
+    // 6. Data atual no formato DD/MM/AAAA como fallback
+    return todayStr;
+  }, [todayStr]);
+
+  // Helper to extract clean DD/MM/YYYY date
+  const getCleanDateOnly = useCallback((ord: OrderItem): string => {
+    return getCompletionDate(ord);
+  }, [getCompletionDate]);
+
+  // Extract unique completion dates for dropdown (sorted chronologically descending)
   const availableDates = useMemo(() => {
     const datesSet = new Set<string>();
     completedOrders.forEach((ord) => {
-      const d = getCleanDateOnly(ord);
+      const d = getCompletionDate(ord);
       if (d) datesSet.add(d);
     });
-    return Array.from(datesSet).sort().reverse();
-  }, [completedOrders]);
+    return Array.from(datesSet).sort((a, b) => {
+      const parse = (str: string) => {
+        const parts = str.split('/');
+        if (parts.length === 3) return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+        return 0;
+      };
+      return parse(b) - parse(a);
+    });
+  }, [completedOrders, getCompletionDate]);
 
   // Extract unique store names for filter dropdown
   const storeOptions = useMemo(() => {
@@ -171,20 +206,13 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   const completedOrdersCountByDate = useMemo(() => {
     const counts: Record<string, number> = {};
     completedOrders.forEach((ord) => {
-      const d = getCleanDateOnly(ord);
+      const d = getCompletionDate(ord);
       if (d) {
         counts[d] = (counts[d] || 0) + 1;
       }
-      const compD = getCompletionDate(ord);
-      if (compD && compD.includes('/')) {
-        const justD = compD.split(' ')[0].trim();
-        if (justD && !counts[justD]) {
-          counts[justD] = 1;
-        }
-      }
     });
     return counts;
-  }, [completedOrders]);
+  }, [completedOrders, getCompletionDate]);
 
   const daysInMonth = useMemo(() => {
     return new Date(calendarYear, calendarMonth + 1, 0).getDate();
@@ -233,11 +261,10 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
       // Date filter
       if (selectedDateFilter !== 'ALL') {
-        const cleanD = getCleanDateOnly(ord);
         const compD = getCompletionDate(ord);
         if (selectedDateFilter === 'TODAY') {
-          if (cleanD !== todayStr && !compD.includes(todayStr)) return false;
-        } else if (cleanD !== selectedDateFilter && !compD.includes(selectedDateFilter)) {
+          if (compD !== todayStr) return false;
+        } else if (compD !== selectedDateFilter) {
           return false;
         }
       }
@@ -255,7 +282,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
       return true;
     });
-  }, [completedOrders, localSearch, externalSearchQuery, selectedStatusFilter, selectedStore, selectedDateFilter, todayStr]);
+  }, [completedOrders, localSearch, externalSearchQuery, selectedStatusFilter, selectedStore, selectedDateFilter, todayStr, getCompletionDate]);
 
   // Checkbox Selection Logic
   const handleToggleSelectOrder = (id: string) => {
@@ -900,8 +927,8 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                       {/* Data de Conclusão */}
                       <td className="py-2.5 px-2.5 whitespace-nowrap font-medium text-slate-600">
                         <div className="flex items-center gap-1 text-[11px] text-slate-600">
-                          <span className="material-symbols-outlined text-[13px] text-slate-400">event_available</span>
-                          <span>{completionDate}</span>
+                          <span className="material-symbols-outlined text-[13px] text-emerald-600">event_available</span>
+                          <span className="font-semibold text-slate-800" title={`Data de conclusão inserida pelo gerente: ${completionDate}`}>{completionDate}</span>
                         </div>
                       </td>
 

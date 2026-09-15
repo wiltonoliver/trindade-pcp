@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { OrderItem, ExecutionStatus, OrderStatusHistoryLog, UserProfile, UrgencyRequest, Store } from '@/types/factory';
 import { sanitizeUnit } from '@/lib/utils';
+import { extractDMYDate } from '@/lib/dateUtils';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
 import { compressImageFile } from '@/lib/imageUtils';
 import { ImageLightboxModal } from '@/components/ImageLightboxModal';
@@ -121,6 +122,37 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
   const [partialRemainingAction, setPartialRemainingAction] = useState<'reschedule' | 'pending_date' | 'close'>('reschedule');
   const [partialRescheduleDate, setPartialRescheduleDate] = useState<string>(() => getTomorrowInputDate());
 
+  // Helpers for completion date
+  const getTodayDisplayDate = () => {
+    const d = new Date();
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const getInitialCompletionDate = (targetOrder?: OrderItem | null): string => {
+    if (!targetOrder) return getTodayDisplayDate();
+    if (targetOrder.completedAt) {
+      const d = extractDMYDate(targetOrder.completedAt);
+      if (d) return d;
+    }
+    const log = targetOrder.statusHistory?.find((h) => h.status === 'concluido');
+    if (log && log.timestamp) {
+      const d = extractDMYDate(log.timestamp);
+      if (d) return d;
+    }
+    if (targetOrder.productionDate && targetOrder.productionDate !== 'Aguardando Data') {
+      const d = extractDMYDate(targetOrder.productionDate);
+      if (d) return d;
+    }
+    return getTodayDisplayDate();
+  };
+
+  const [editableCompletionDate, setEditableCompletionDate] = useState<string>(() =>
+    getInitialCompletionDate(order)
+  );
+
   // Track current order ID to reset local state when order changes
   const [prevOrderId, setPrevOrderId] = useState<string | null>(null);
 
@@ -137,6 +169,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     setEditableStore(order.store || '');
     setEditableItemDescription(order.itemDescription || '');
     setEditableDeliveryDate(order.deliveryDate || '');
+    setEditableCompletionDate(getInitialCompletionDate(order));
     setModalImage(order.imageUrl || null);
     setPartialCompletedQty(total > 1 ? total - 1 : 1);
     setPartialRemainingAction('reschedule');
@@ -202,8 +235,12 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     const descChanged = (editableItemDescription || '').trim() !== (order.itemDescription || '').trim();
     const dateChanged = (editableDeliveryDate || '').trim() !== (order.deliveryDate || '').trim();
     const imageChanged = (modalImage || null) !== (order.imageUrl || null);
-    return storeChanged || descChanged || dateChanged || imageChanged;
-  }, [order, editableStore, editableItemDescription, editableDeliveryDate, modalImage]);
+    const isCompleted = order.executionStatus === 'concluido' || order.progress === 100;
+    const compDateChanged =
+      isCompleted &&
+      (formatToDisplayDate(editableCompletionDate) || '').trim() !== (extractDMYDate(order.completedAt) || '').trim();
+    return storeChanged || descChanged || dateChanged || imageChanged || compDateChanged;
+  }, [order, editableStore, editableItemDescription, editableDeliveryDate, modalImage, editableCompletionDate]);
 
   // Urgency Request Local States
   const [urgencyReasonText, setUrgencyReasonText] = useState<string>('');
@@ -809,6 +846,12 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       fieldChangeNotes.push(modalImage ? 'Imagem/Desenho técnico anexado ou atualizado' : 'Imagem/Desenho técnico removido');
     }
 
+    const compDateVal = formatToDisplayDate(editableCompletionDate);
+    const isCompleted = order.executionStatus === 'concluido' || order.progress === 100;
+    if (isCompleted && compDateVal && compDateVal !== (extractDMYDate(order.completedAt) || '')) {
+      fieldChangeNotes.push(`Data de conclusão alterada para "${compDateVal}"`);
+    }
+
     const newLog: OrderStatusHistoryLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: nowStr,
@@ -825,6 +868,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
       storeInitials: newStoreInitials,
       itemDescription: editableItemDescription.trim() || order.itemDescription,
       deliveryDate: editableDeliveryDate.trim(),
+      completedAt: isCompleted ? (compDateVal || order.completedAt) : order.completedAt,
       imageUrl: modalImage || undefined,
       images: modalImage ? [modalImage] : undefined,
       statusHistory: fieldChangeNotes.length > 0 ? [newLog, ...(order.statusHistory || [])] : order.statusHistory,
@@ -874,13 +918,14 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     // 1. Status Concluído Total (100%)
     if (selectedStatus === 'concluido') {
+      const finalCompletionDate = formatToDisplayDate(editableCompletionDate) || getTodayDisplayDate();
       const newLog: OrderStatusHistoryLog = {
         id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: nowStr,
+        timestamp: `${finalCompletionDate} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
         author: authorName,
         status: 'concluido',
         reason: 'Concluído',
-        note: combinedNote || `Baixa de produção 100% efetuada (${totalQty} ${sanitizeUnit(order.unit)}).`,
+        note: combinedNote || `Baixa de produção 100% efetuada em ${finalCompletionDate} (${totalQty} ${sanitizeUnit(order.unit)}).`,
         previousDate: order.productionDate || 'Aguardando Data',
         actionType: 'status_update',
         cleanlinessScore,
@@ -894,6 +939,8 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
         storeInitials: newStoreInitials,
         itemDescription: editableItemDescription.trim() || order.itemDescription,
         deliveryDate: editableDeliveryDate.trim(),
+        completedAt: finalCompletionDate,
+        completedBy: authorName,
         imageUrl: modalImage || undefined,
         images: modalImage ? [modalImage] : undefined,
         executionStatus: 'concluido',
@@ -1266,6 +1313,22 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                   className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-all cursor-pointer"
                 />
               </div>
+
+              {/* Data de Conclusão (quando concluído) */}
+              {(order.executionStatus === 'concluido' || order.progress === 100) && (
+                <div className="md:col-span-3 space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[15px] text-emerald-600">event_available</span>
+                    <span>Data Conclusão (dd/mm/aaaa)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formatToInputDate(editableCompletionDate)}
+                    onChange={(e) => setEditableCompletionDate(formatToDisplayDate(e.target.value))}
+                    className="w-full bg-emerald-50/50 border border-emerald-300 rounded-xl px-3 py-2 text-xs font-bold text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none transition-all cursor-pointer"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Attached Image / Technical Drawing Area */}
@@ -1750,6 +1813,52 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* SPECIFIC CONFIGURATION FOR FULL COMPLETION (100%) */}
+              {selectedStatus === 'concluido' && (
+                <div className="space-y-4 bg-emerald-50/70 p-4.5 rounded-2xl border border-emerald-200 animate-fadeIn">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[18px] text-emerald-700">task_alt</span>
+                      <span>2. Data de Conclusão da Produção</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                      {order.quantity || 1} {sanitizeUnit(order.unit)} Concluídas (100%)
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-xl border border-emerald-200/90 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="block text-xs font-bold text-slate-800">
+                        Data em que a produção foi concluída:
+                      </label>
+                      <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        dd/mm/aaaa: {formatToDisplayDate(editableCompletionDate) || getTodayDisplayDate()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={formatToInputDate(editableCompletionDate)}
+                        onChange={(e) => setEditableCompletionDate(formatToDisplayDate(e.target.value))}
+                        className="flex-1 bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none transition-all cursor-pointer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditableCompletionDate(getTodayDisplayDate())}
+                        className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap"
+                      >
+                        Hoje ({getTodayDisplayDate()})
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-slate-500">
+                      Esta data será registrada e exibida na planilha de concluídos no formato <strong>dd/mm/aaaa</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* SPECIFIC CONFIGURATION FOR PARTIAL PRODUCTION */}
               {selectedStatus === 'parcial' && (
