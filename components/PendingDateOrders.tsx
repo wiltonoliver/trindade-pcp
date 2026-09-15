@@ -67,6 +67,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
   const [deliveryStartDate, setDeliveryStartDate] = useState<string>('');
   const [deliveryEndDate, setDeliveryEndDate] = useState<string>('');
   const [onlyWithoutDeliveryDate, setOnlyWithoutDeliveryDate] = useState<boolean>(false);
+  const [onlyDelayedDelivery, setOnlyDelayedDelivery] = useState<boolean>(false);
   const [localSearch, setLocalSearch] = useState('');
   const [selectedOrderForStatusModal, setSelectedOrderForStatusModal] = useState<OrderItem | null>(null);
 
@@ -148,6 +149,12 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
 
   const businessDays = useMemo(() => getBusinessDays(), []);
 
+  // Today comparable integer YYYYMMDD
+  const todayComparable = useMemo(() => {
+    const now = new Date();
+    return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+  }, []);
+
   // Filter active orders that are waiting for a date
   const pendingDateOrders = useMemo(() => {
     return orders.filter((ord) => {
@@ -155,6 +162,14 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
       return ord.column === 'nao_planejado' || !ord.productionDate || ord.productionDate.toLowerCase().includes('aguardando');
     });
   }, [orders]);
+
+  // Count of pending orders with delayed delivery
+  const delayedOrdersCount = useMemo(() => {
+    return pendingDateOrders.filter((ord) => {
+      const orderDateComp = parseDateToComparable(ord.deliveryDate);
+      return orderDateComp !== null && orderDateComp < todayComparable;
+    }).length;
+  }, [pendingDateOrders, todayComparable]);
 
   // Extract available distinct delivery dates from pending orders
   const availableDeliveryDates = useMemo(() => {
@@ -177,7 +192,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
     });
   }, [pendingDateOrders]);
 
-  // Combined filtered orders (by search query, store filter & delivery date period range)
+  // Combined filtered orders (by search query, store filter & delivery date period range / atrasados)
   const filteredOrders = useMemo(() => {
     const startComp = parseISOToComparable(deliveryStartDate);
     const endComp = parseISOToComparable(deliveryEndDate);
@@ -188,7 +203,12 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
         return false;
       }
 
-      if (onlyWithoutDeliveryDate) {
+      if (onlyDelayedDelivery) {
+        const orderDateComp = parseDateToComparable(ord.deliveryDate);
+        if (orderDateComp === null || orderDateComp >= todayComparable) {
+          return false;
+        }
+      } else if (onlyWithoutDeliveryDate) {
         const d = ord.deliveryDate?.trim();
         if (d && d !== 'Sem Data Prevista' && d !== 'Aguardando Data' && d !== '') {
           return false;
@@ -216,6 +236,8 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
     deliveryStartDate,
     deliveryEndDate,
     onlyWithoutDeliveryDate,
+    onlyDelayedDelivery,
+    todayComparable,
     searchQuery,
     localSearch,
   ]);
@@ -661,14 +683,20 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
           {/* Delivery Date Range Filter */}
           <div
             className={`flex flex-wrap sm:flex-nowrap items-center gap-2 p-1.5 px-3 rounded-xl border text-xs transition-all shadow-2xs ${
-              deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate
+              onlyDelayedDelivery
+                ? 'border-rose-400 bg-rose-50/80 text-rose-950 font-bold ring-2 ring-rose-300/30'
+                : deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate
                 ? 'border-amber-400 bg-amber-50/70 text-amber-950 font-bold'
                 : 'border-slate-200 bg-slate-50 text-slate-700'
             }`}
           >
-            <div className="flex items-center gap-1.5 shrink-0 text-amber-800">
-              <span className="material-symbols-outlined text-amber-600 text-base">local_shipping</span>
-              <span className="text-[11px] font-bold text-slate-700 hidden md:inline">Entrega:</span>
+            <div className={`flex items-center gap-1.5 shrink-0 ${onlyDelayedDelivery ? 'text-rose-800' : 'text-amber-800'}`}>
+              <span className={`material-symbols-outlined text-base ${onlyDelayedDelivery ? 'text-rose-600' : 'text-amber-600'}`}>
+                {onlyDelayedDelivery ? 'warning' : 'local_shipping'}
+              </span>
+              <span className="text-[11px] font-bold text-slate-700 hidden md:inline">
+                {onlyDelayedDelivery ? 'Status:' : 'Entrega:'}
+              </span>
             </div>
 
             {/* Start Date */}
@@ -680,6 +708,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                 onChange={(e) => {
                   setDeliveryStartDate(e.target.value);
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 }}
                 className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
                 title="Data inicial da entrega prevista"
@@ -696,16 +725,19 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                 onChange={(e) => {
                   setDeliveryEndDate(e.target.value);
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 }}
                 className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
                 title="Data final da entrega prevista"
               />
             </div>
 
-            {/* Quick Presets / Sem Data Dropdown */}
+            {/* Quick Presets / Sem Data / Atrasados Dropdown */}
             <select
               value={
-                onlyWithoutDeliveryDate
+                onlyDelayedDelivery
+                  ? 'DELAYED'
+                  : onlyWithoutDeliveryDate
                   ? 'WITHOUT_DATE'
                   : deliveryStartDate && deliveryEndDate && deliveryStartDate === deliveryEndDate
                   ? 'CUSTOM'
@@ -725,11 +757,18 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                   setDeliveryStartDate('');
                   setDeliveryEndDate('');
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
+                } else if (val === 'DELAYED') {
+                  setDeliveryStartDate('');
+                  setDeliveryEndDate('');
+                  setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(true);
                 } else if (val === 'TODAY') {
                   const today = toISO(now);
                   setDeliveryStartDate(today);
                   setDeliveryEndDate(today);
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 } else if (val === 'THIS_WEEK') {
                   const curr = new Date(now);
                   const day = curr.getDay();
@@ -739,35 +778,47 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                   setDeliveryStartDate(toISO(monday));
                   setDeliveryEndDate(toISO(friday));
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 } else if (val === 'NEXT_7') {
                   const end = new Date(now);
                   end.setDate(end.getDate() + 7);
                   setDeliveryStartDate(toISO(now));
                   setDeliveryEndDate(toISO(end));
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 } else if (val === 'NEXT_15') {
                   const end = new Date(now);
                   end.setDate(end.getDate() + 15);
                   setDeliveryStartDate(toISO(now));
                   setDeliveryEndDate(toISO(end));
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 } else if (val === 'THIS_MONTH') {
                   const start = new Date(now.getFullYear(), now.getMonth(), 1);
                   const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
                   setDeliveryStartDate(toISO(start));
                   setDeliveryEndDate(toISO(end));
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 } else if (val === 'WITHOUT_DATE') {
                   setDeliveryStartDate('');
                   setDeliveryEndDate('');
                   setOnlyWithoutDeliveryDate(true);
+                  setOnlyDelayedDelivery(false);
                 }
               }}
-              className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs hidden lg:inline-block"
-              title="Atalhos rápidos de período"
+              className={`px-2 py-1 bg-white border rounded-lg text-xs font-bold focus:outline-none focus:ring-2 cursor-pointer shadow-2xs ${
+                onlyDelayedDelivery
+                  ? 'border-rose-400 bg-rose-50/90 text-rose-800 focus:ring-rose-500'
+                  : 'border-slate-200 text-slate-700 focus:ring-amber-500'
+              }`}
+              title="Atalhos rápidos de período e pedidos com entrega atrasada"
             >
               <option value="CUSTOM">Atalhos...</option>
               <option value="ALL">Qualquer Data</option>
+              <option value="DELAYED" className="text-rose-600 font-bold">
+                ⚠️ Entrega Atrasada ({delayedOrdersCount})
+              </option>
               <option value="TODAY">Hoje</option>
               <option value="THIS_WEEK">Esta Semana (Seg-Sex)</option>
               <option value="NEXT_7">Próximos 7 dias</option>
@@ -777,13 +828,14 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
             </select>
 
             {/* Clear Date Range */}
-            {(deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate) && (
+            {(deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate || onlyDelayedDelivery) && (
               <button
                 type="button"
                 onClick={() => {
                   setDeliveryStartDate('');
                   setDeliveryEndDate('');
                   setOnlyWithoutDeliveryDate(false);
+                  setOnlyDelayedDelivery(false);
                 }}
                 className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer shrink-0"
                 title="Limpar período de entrega"
@@ -794,7 +846,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
           </div>
 
           {/* Reset Filters Button */}
-          {(selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate || localSearch.trim() !== '') && (
+          {(selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate || onlyDelayedDelivery || localSearch.trim() !== '') && (
             <button
               type="button"
               onClick={() => {
@@ -802,6 +854,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                 setDeliveryStartDate('');
                 setDeliveryEndDate('');
                 setOnlyWithoutDeliveryDate(false);
+                setOnlyDelayedDelivery(false);
                 setLocalSearch('');
               }}
               className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 hover:text-rose-800 rounded-xl text-xs font-bold border border-rose-200 transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
@@ -818,21 +871,27 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
       {storeGroups.length === 0 ? (
         <div className="bg-white p-12 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col items-center justify-center text-center space-y-4">
           <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center font-bold">
-            <span className="material-symbols-outlined text-4xl">event_available</span>
+            <span className="material-symbols-outlined text-4xl">
+              {onlyDelayedDelivery ? 'task_alt' : 'event_available'}
+            </span>
           </div>
           <div className="max-w-md space-y-1">
             <h3 className="text-base font-bold text-slate-900">
-              {localSearch || selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate
+              {onlyDelayedDelivery
+                ? 'Nenhum Pedido com Entrega Atrasada!'
+                : localSearch || selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate
                 ? 'Nenhum Pedido Encontrado'
                 : 'Nenhum Pedido Aguardando Data'}
             </h3>
             <p className="text-xs text-slate-500">
-              {localSearch || selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate
+              {onlyDelayedDelivery
+                ? 'Excelente! Todos os pedidos previstos estão dentro do prazo de entrega.'
+                : localSearch || selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate
                 ? 'Nenhum pedido atende aos filtros de busca, loja ou período de entrega selecionados.'
                 : 'Excelente! Todas as ordens de produção estão devidamente agendadas no painel de planejamento.'}
             </p>
           </div>
-          {localSearch || selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate ? (
+          {localSearch || selectedStoreFilter !== 'ALL' || deliveryStartDate || deliveryEndDate || onlyWithoutDeliveryDate || onlyDelayedDelivery ? (
             <button
               type="button"
               onClick={() => {
@@ -840,6 +899,7 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                 setDeliveryStartDate('');
                 setDeliveryEndDate('');
                 setOnlyWithoutDeliveryDate(false);
+                setOnlyDelayedDelivery(false);
                 setLocalSearch('');
               }}
               className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer inline-flex items-center gap-1.5"
@@ -927,18 +987,44 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
                   return sortedDeliveryKeys.map((deliveryKey) => {
                     const subOrders = deliveryMap.get(deliveryKey)!;
                     const subItemsCount = subOrders.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
+                    const isSubGroupDelayed = (() => {
+                      const comp = parseDateToComparable(deliveryKey);
+                      return comp !== null && comp < todayComparable;
+                    })();
 
                     return (
                       <div key={deliveryKey} className="space-y-0">
                         {/* Sub-header for Expected Delivery Date */}
-                        <div className="bg-gradient-to-r from-amber-50/80 via-slate-50 to-white border-y border-amber-200/50 px-5 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                        <div className={`border-y px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 transition-colors ${
+                          isSubGroupDelayed
+                            ? 'bg-gradient-to-r from-rose-50/90 via-red-50/40 to-white border-rose-200/80'
+                            : 'bg-gradient-to-r from-amber-50/80 via-slate-50 to-white border-amber-200/50'
+                        }`}>
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-amber-600 text-base">local_shipping</span>
-                            <span className="text-xs font-bold text-slate-700">
-                              Data Prevista de Entrega: <span className="text-amber-900 bg-amber-100 border border-amber-300/80 px-2.5 py-0.5 rounded-md font-extrabold ml-1">{deliveryKey}</span>
+                            <span className={`material-symbols-outlined text-base ${isSubGroupDelayed ? 'text-rose-600' : 'text-amber-600'}`}>
+                              {isSubGroupDelayed ? 'warning' : 'local_shipping'}
+                            </span>
+                            <span className="text-xs font-bold text-slate-700 flex items-center flex-wrap gap-1.5">
+                              <span>Data Prevista de Entrega:</span>
+                              <span className={`px-2.5 py-0.5 rounded-md font-extrabold border inline-flex items-center gap-1.5 ${
+                                isSubGroupDelayed
+                                  ? 'text-rose-950 bg-rose-100/90 border-rose-300'
+                                  : 'text-amber-900 bg-amber-100 border-amber-300/80'
+                              }`}>
+                                <span>{deliveryKey}</span>
+                                {isSubGroupDelayed && (
+                                  <span className="text-[10px] uppercase tracking-wide bg-rose-600 text-white px-1.5 py-0.2 rounded font-black">
+                                    Atrasado
+                                  </span>
+                                )}
+                              </span>
                             </span>
                           </div>
-                          <span className="text-[11px] font-bold text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200 shadow-2xs">
+                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border shadow-2xs ${
+                            isSubGroupDelayed
+                              ? 'text-rose-700 bg-white border-rose-200'
+                              : 'text-slate-600 bg-white border-slate-200'
+                          }`}>
                             {subOrders.length} {subOrders.length === 1 ? 'pedido' : 'pedidos'} ({subItemsCount} peças)
                           </span>
                         </div>
@@ -1204,28 +1290,52 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
 
                                     {/* Delivery Date (Editable Button) */}
                                     <td className="px-2.5 py-2.5 whitespace-nowrap">
-                                      <button
-                                        type="button"
-                                        disabled={isReadOnly}
-                                        onClick={() => {
-                                          if (!isReadOnly) {
-                                            setOrderForDeliveryDate(ord);
-                                            setQuickDateValue(ord.deliveryDate && ord.deliveryDate !== 'Sem Data Prevista' ? ord.deliveryDate : '');
-                                          }
-                                        }}
-                                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer border ${
-                                          ord.deliveryDate && ord.deliveryDate !== 'Sem Data Prevista' && ord.deliveryDate !== 'Aguardando Data'
-                                            ? 'bg-amber-50 text-amber-900 border-amber-200/90 hover:bg-amber-100 hover:border-amber-300'
-                                            : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200'
-                                        }`}
-                                        title={isReadOnly ? 'Data prevista' : 'Clique para alterar a data prevista de entrega'}
-                                      >
-                                        <span className="material-symbols-outlined text-[13px] text-amber-600">event</span>
-                                        <span>{ord.deliveryDate && ord.deliveryDate !== 'Aguardando Data' ? ord.deliveryDate : 'Sem Data Prevista'}</span>
-                                        {!isReadOnly && (
-                                          <span className="material-symbols-outlined text-[11px] text-slate-400 ml-0.5">edit</span>
-                                        )}
-                                      </button>
+                                      {(() => {
+                                        const isDelayed = (() => {
+                                          const comp = parseDateToComparable(ord.deliveryDate);
+                                          return comp !== null && comp < todayComparable;
+                                        })();
+
+                                        return (
+                                          <button
+                                            type="button"
+                                            disabled={isReadOnly}
+                                            onClick={() => {
+                                              if (!isReadOnly) {
+                                                setOrderForDeliveryDate(ord);
+                                                setQuickDateValue(ord.deliveryDate && ord.deliveryDate !== 'Sem Data Prevista' ? ord.deliveryDate : '');
+                                              }
+                                            }}
+                                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer border ${
+                                              isDelayed
+                                                ? 'bg-rose-50 text-rose-800 border-rose-300 hover:bg-rose-100 hover:border-rose-400'
+                                                : ord.deliveryDate && ord.deliveryDate !== 'Sem Data Prevista' && ord.deliveryDate !== 'Aguardando Data'
+                                                ? 'bg-amber-50 text-amber-900 border-amber-200/90 hover:bg-amber-100 hover:border-amber-300'
+                                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200'
+                                            }`}
+                                            title={
+                                              isDelayed
+                                                ? 'Entrega atrasada! Clique para alterar a data prevista'
+                                                : isReadOnly
+                                                ? 'Data prevista'
+                                                : 'Clique para alterar a data prevista de entrega'
+                                            }
+                                          >
+                                            <span className={`material-symbols-outlined text-[13px] ${isDelayed ? 'text-rose-600' : 'text-amber-600'}`}>
+                                              {isDelayed ? 'warning' : 'event'}
+                                            </span>
+                                            <span>{ord.deliveryDate && ord.deliveryDate !== 'Aguardando Data' ? ord.deliveryDate : 'Sem Data Prevista'}</span>
+                                            {isDelayed && (
+                                              <span className="ml-1 text-[9px] uppercase px-1 py-0.2 bg-rose-600 text-white rounded font-black">
+                                                Atrasado
+                                              </span>
+                                            )}
+                                            {!isReadOnly && (
+                                              <span className="material-symbols-outlined text-[11px] text-slate-400 ml-0.5">edit</span>
+                                            )}
+                                          </button>
+                                        );
+                                      })()}
                                     </td>
 
                                     {/* Operator (Editable Button) */}
