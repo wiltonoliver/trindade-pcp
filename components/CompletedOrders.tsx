@@ -486,24 +486,18 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
               type="button"
               onClick={() => setIsCalendarOpen((prev) => !prev)}
               aria-label="Abrir calendário para filtrar pedidos concluídos por data"
-              className={`h-[38px] px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs ${
+              className={`w-[38px] h-[38px] rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow-2xs ${
                 isCalendarOpen || (selectedDateFilter !== 'ALL' && selectedDateFilter !== 'TODAY')
                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-600/20 ring-2 ring-emerald-500/20'
-                  : 'bg-slate-50 hover:bg-white text-slate-700 border-slate-200 hover:border-emerald-400'
+                  : 'bg-slate-50 hover:bg-white text-slate-700 hover:text-emerald-700 border-slate-200 hover:border-emerald-400'
               }`}
-              title="Clique para abrir o calendário e escolher uma data"
+              title={
+                selectedDateFilter !== 'ALL'
+                  ? `Data filtrada: ${selectedDateFilter} (Clique para abrir o calendário)`
+                  : 'Clique para abrir o calendário'
+              }
             >
-              <span className="material-symbols-outlined text-[18px]">calendar_month</span>
-              <span className="hidden sm:inline font-bold">
-                {selectedDateFilter === 'ALL'
-                  ? 'Calendário'
-                  : selectedDateFilter === 'TODAY'
-                  ? 'Hoje'
-                  : selectedDateFilter}
-              </span>
-              <span className="material-symbols-outlined text-[16px] opacity-70">
-                {isCalendarOpen ? 'expand_less' : 'expand_more'}
-              </span>
+              <span className="material-symbols-outlined text-[20px]">calendar_month</span>
             </button>
 
             {selectedDateFilter !== 'ALL' && (
