@@ -133,6 +133,12 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
   const getInitialCompletionDate = (targetOrder?: OrderItem | null): string => {
     if (!targetOrder) return getTodayDisplayDate();
+    // 1. Data em que a peça foi programada/produzida na fábrica
+    if (targetOrder.productionDate && !targetOrder.productionDate.toLowerCase().includes('aguardando')) {
+      const d = extractDMYDate(targetOrder.productionDate);
+      if (d) return d;
+    }
+    // 2. Data salva anteriormente
     if (targetOrder.completedAt) {
       const d = extractDMYDate(targetOrder.completedAt);
       if (d) return d;
@@ -140,10 +146,6 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     const log = targetOrder.statusHistory?.find((h) => h.status === 'concluido');
     if (log && log.timestamp) {
       const d = extractDMYDate(log.timestamp);
-      if (d) return d;
-    }
-    if (targetOrder.productionDate && targetOrder.productionDate !== 'Aguardando Data') {
-      const d = extractDMYDate(targetOrder.productionDate);
       if (d) return d;
     }
     return getTodayDisplayDate();
@@ -1314,12 +1316,12 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                 />
               </div>
 
-              {/* Data de Conclusão (quando concluído) */}
+              {/* Data de Produção (quando concluído) */}
               {(order.executionStatus === 'concluido' || order.progress === 100) && (
                 <div className="md:col-span-3 space-y-1">
                   <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                     <span className="material-symbols-outlined text-[15px] text-emerald-600">event_available</span>
-                    <span>Data Conclusão (dd/mm/aaaa)</span>
+                    <span>Data Produção (dd/mm/aaaa)</span>
                   </label>
                   <input
                     type="date"
@@ -1820,7 +1822,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <label className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
                       <span className="material-symbols-outlined text-[18px] text-emerald-700">task_alt</span>
-                      <span>2. Data de Conclusão da Produção</span>
+                      <span>2. Data de Produção da Peça</span>
                     </label>
                     <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
                       {order.quantity || 1} {sanitizeUnit(order.unit)} Concluídas (100%)
@@ -1830,7 +1832,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                   <div className="bg-white p-4 rounded-xl border border-emerald-200/90 shadow-2xs space-y-2.5">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="block text-xs font-bold text-slate-800">
-                        Data em que a produção foi concluída:
+                        Data em que a peça foi produzida:
                       </label>
                       <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                         dd/mm/aaaa: {formatToDisplayDate(editableCompletionDate) || getTodayDisplayDate()}

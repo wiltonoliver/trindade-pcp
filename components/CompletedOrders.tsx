@@ -116,15 +116,21 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
   const todayStr = useMemo(() => new Date().toLocaleDateString('pt-BR'), []);
 
-  // Helper to format completion date from manager input or status history in DD/MM/YYYY
-  const getCompletionDate = useCallback((ord: OrderItem): string => {
-    // 1. Data explicitamente informada ou salva pelo gerente (completedAt)
+  // Helper to format production date (a data em que a peça foi produzida) in DD/MM/YYYY
+  const getProducedDate = useCallback((ord: OrderItem): string => {
+    // 1. Prioridade máxima: Data em que foi programado/produzido na fábrica (productionDate)
+    if (ord.productionDate && !ord.productionDate.toLowerCase().includes('aguardando')) {
+      const d = extractDMYDate(ord.productionDate);
+      if (d) return d;
+    }
+
+    // 2. Data de conclusão registrada pelo gerente (completedAt) se não houver productionDate específica
     if (ord.completedAt) {
       const d = extractDMYDate(ord.completedAt);
       if (d) return d;
     }
 
-    // 2. Histórico de status: log onde o status foi alterado para concluído
+    // 3. Histórico de status: log onde o status foi alterado para concluído
     const completedLog = ord.statusHistory?.find(
       (h) => h.status === 'concluido' || (h.actionType === 'status_update' && h.status === 'concluido')
     );
@@ -139,7 +145,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
       }
     }
 
-    // 3. Caso tenha sido encerrado sem produzir
+    // 4. Caso tenha sido encerrado sem produzir
     if (ord.isClosedUncompleted) {
       if (ord.closedAt) {
         const d = extractDMYDate(ord.closedAt);
@@ -154,7 +160,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
       }
     }
 
-    // 4. Qualquer log com data válida no histórico
+    // 5. Qualquer log com data válida no histórico
     if (ord.statusHistory && ord.statusHistory.length > 0) {
       for (const log of ord.statusHistory) {
         if (log.timestamp) {
@@ -164,20 +170,36 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
       }
     }
 
-    // 5. Data de produção cadastrada
-    if (ord.productionDate && ord.productionDate !== 'Aguardando Data') {
-      const d = extractDMYDate(ord.productionDate);
-      if (d) return d;
-    }
-
     // 6. Data atual no formato DD/MM/AAAA como fallback
     return todayStr;
   }, [todayStr]);
 
+  // Helper para obter a data em que foi dada baixa (se registrada)
+  const getBaixaDate = useCallback((ord: OrderItem): string | null => {
+    if (ord.completedAt) {
+      const d = extractDMYDate(ord.completedAt);
+      if (d) return d;
+    }
+    const completedLog = ord.statusHistory?.find(
+      (h) => h.status === 'concluido' || (h.actionType === 'status_update' && h.status === 'concluido')
+    );
+    if (completedLog?.timestamp) {
+      const d = extractDMYDate(completedLog.timestamp);
+      if (d) return d;
+    }
+    if (ord.closedAt) {
+      const d = extractDMYDate(ord.closedAt);
+      if (d) return d;
+    }
+    return null;
+  }, []);
+
+  const getCompletionDate = getProducedDate;
+
   // Helper to extract clean DD/MM/YYYY date
   const getCleanDateOnly = useCallback((ord: OrderItem): string => {
-    return getCompletionDate(ord);
-  }, [getCompletionDate]);
+    return getProducedDate(ord);
+  }, [getProducedDate]);
 
   // Extract unique completion dates for dropdown (sorted chronologically descending)
   const availableDates = useMemo(() => {
@@ -469,7 +491,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
         {/* Date Filter */}
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs font-bold text-slate-500 whitespace-nowrap hidden sm:inline">Data Conclusão:</span>
+          <span className="text-xs font-bold text-slate-500 whitespace-nowrap hidden sm:inline">Data Produção:</span>
           <select
             value={selectedDateFilter}
             onChange={(e) => {
@@ -854,14 +876,15 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                   <th className="py-2.5 px-2.5">Descrição da Peça</th>
                   <th className="py-2.5 px-2 text-center whitespace-nowrap w-12">Qtd</th>
                   <th className="py-2.5 px-2.5 whitespace-nowrap">Montador</th>
-                  <th className="py-2.5 px-2.5 whitespace-nowrap">Conclusão</th>
+                  <th className="py-2.5 px-2.5 whitespace-nowrap">Data Produção</th>
                   <th className="py-2.5 px-2 text-center whitespace-nowrap">Status</th>
                   <th className="py-2.5 px-2.5 text-right whitespace-nowrap">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
                 {filteredCompletedOrders.map((ord) => {
-                  const completionDate = getCompletionDate(ord);
+                  const producedDate = getProducedDate(ord);
+                  const baixaDate = getBaixaDate(ord);
                   const isChecked = selectedOrderIdsForBatch.includes(ord.id);
 
                   return (
@@ -924,11 +947,19 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                         )}
                       </td>
 
-                      {/* Data de Conclusão */}
+                      {/* Data em que foi produzido */}
                       <td className="py-2.5 px-2.5 whitespace-nowrap font-medium text-slate-600">
-                        <div className="flex items-center gap-1 text-[11px] text-slate-600">
+                        <div
+                          className="flex items-center gap-1.5 text-[11px] text-slate-700"
+                          title={`Data em que foi produzido: ${producedDate}${baixaDate && baixaDate !== producedDate ? ` (Baixa dada em: ${baixaDate})` : ''}`}
+                        >
                           <span className="material-symbols-outlined text-[13px] text-emerald-600">event_available</span>
-                          <span className="font-semibold text-slate-800" title={`Data de conclusão inserida pelo gerente: ${completionDate}`}>{completionDate}</span>
+                          <span className="font-bold text-slate-900">{producedDate}</span>
+                          {baixaDate && baixaDate !== producedDate && (
+                            <span className="text-[10px] text-slate-400 font-medium ml-0.5">
+                              (Baixa: {baixaDate})
+                            </span>
+                          )}
                         </div>
                       </td>
 
