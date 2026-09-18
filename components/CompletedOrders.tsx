@@ -388,6 +388,46 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
     setRemakeNote('');
   };
 
+  // Confirm direct return to "Aguardando Data" without requiring a reason
+  const handleDirectReturnToPendingDate = (orderItem: OrderItem) => {
+    const now = new Date().toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const remakeLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: now,
+      author: currentUser?.name || 'Gestor',
+      status: 'pendente',
+      reason: 'Retornado para Aguardando Data',
+      note: remakeNote.trim() ? remakeNote.trim() : 'Retornado diretamente para a fila de Aguardando Data sem motivo',
+      actionType: 'return_to_pending',
+    };
+
+    const updatedOrder: OrderItem = {
+      ...orderItem,
+      executionStatus: 'pendente',
+      progress: 0,
+      column: 'nao_planejado',
+      productionDate: '',
+      isClosedUncompleted: false,
+      closedAt: undefined,
+      closedBy: undefined,
+      statusHistory: [...(orderItem.statusHistory || []), remakeLog],
+    };
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
+    );
+    saveOrderToFirestore(updatedOrder);
+    setOrderToRemake(null);
+    setRemakeNote('');
+  };
+
   // Confirm deleting order
   const handleConfirmDelete = async () => {
     if (!orderToDelete) return;
@@ -1095,16 +1135,25 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => {
                   setOrderToRemake(null);
                   setRemakeNote('');
                 }}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDirectReturnToPendingDate(orderToRemake)}
+                className="px-3.5 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                title="Retornar diretamente para a fila de Aguardando Data sem necessidade de relatar motivo"
+              >
+                <span className="material-symbols-outlined text-base text-amber-800">pending_actions</span>
+                <span>Retornar p/ Aguardando Data</span>
               </button>
               <button
                 type="button"
@@ -1112,7 +1161,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                 className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
               >
                 <span className="material-symbols-outlined text-base">replay</span>
-                <span>Confirmar e Refazer</span>
+                <span>Refazer em Hoje</span>
               </button>
             </div>
           </div>

@@ -266,6 +266,83 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
     setSelectedOrderIds([]);
   };
 
+  // Quick action: Return order to Aguardando Data directly without requiring a reason
+  const handleReturnToPendingDate = (ord: OrderItem) => {
+    if (isReadOnly) return;
+
+    const author = currentUser?.name || 'Gerente de Operações';
+    const now = new Date().toLocaleString('pt-BR');
+
+    const newLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: now,
+      author,
+      status: 'retornado_aguardando',
+      note: `Retornado diretamente para Aguardando Data sem motivo na tela de Baixas Pendentes (data anterior: ${ord.productionDate || 'N/A'})`,
+      previousDate: ord.productionDate || 'Aguardando Data',
+      actionType: 'return_to_pending',
+    };
+
+    const updatedOrder: OrderItem = {
+      ...ord,
+      productionDate: '',
+      column: 'nao_planejado',
+      executionStatus: 'pendente',
+      progress: 0,
+      isPendingReposition: false,
+      delayReason: '',
+      pendingReason: '',
+      statusHistory: [...(ord.statusHistory || []), newLog],
+    };
+
+    setOrders((prev) => prev.map((o) => (o.id === ord.id ? updatedOrder : o)));
+    saveOrderToFirestore(updatedOrder).catch(() => {});
+    showToast(`Pedido ${ord.orderId} retornou para "Aguardando Data" com sucesso!`, 'info');
+  };
+
+  // Batch action: Return selected orders to Aguardando Data directly without requiring a reason
+  const handleBatchReturnToPendingDate = () => {
+    if (isReadOnly || selectedOrderIds.length === 0) return;
+
+    const author = currentUser?.name || 'Gerente de Operações';
+    const now = new Date().toLocaleString('pt-BR');
+    const count = selectedOrderIds.length;
+
+    setOrders((prev) => {
+      const updated = prev.map((ord) => {
+        if (selectedOrderIds.includes(ord.id)) {
+          const newLog: OrderStatusHistoryLog = {
+            id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+            timestamp: now,
+            author,
+            status: 'retornado_aguardando',
+            note: `Retornado em lote para Aguardando Data sem motivo na tela de Baixas Pendentes (data anterior: ${ord.productionDate || 'N/A'})`,
+            previousDate: ord.productionDate || 'Aguardando Data',
+            actionType: 'return_to_pending',
+          };
+          const itemUpdated: OrderItem = {
+            ...ord,
+            productionDate: '',
+            column: 'nao_planejado',
+            executionStatus: 'pendente',
+            progress: 0,
+            isPendingReposition: false,
+            delayReason: '',
+            pendingReason: '',
+            statusHistory: [...(ord.statusHistory || []), newLog],
+          };
+          saveOrderToFirestore(itemUpdated).catch(() => {});
+          return itemUpdated;
+        }
+        return ord;
+      });
+      return updated;
+    });
+
+    showToast(`${count} pedidos retornaram para "Aguardando Data"!`, 'info');
+    setSelectedOrderIds([]);
+  };
+
   return (
     <div className="space-y-6 pb-12">
       {/* Toast Feedback */}
@@ -447,21 +524,30 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
             <span>{selectedOrderIds.length} {selectedOrderIds.length === 1 ? 'item selecionado' : 'itens selecionados'} para ação coletiva</span>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <button
               onClick={handleBatchComplete}
-              className="flex-1 sm:flex-initial px-4 py-2 bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-950 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
-              <span>Dar Baixa Selecionados (100%)</span>
+              <span>Dar Baixa (100%)</span>
             </button>
 
             <button
               onClick={handleBatchRescheduleToToday}
-              className="flex-1 sm:flex-initial px-4 py-2 bg-white hover:bg-slate-50 text-slate-900 border border-amber-600 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-900 border border-amber-600 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[16px] text-blue-600">today</span>
-              <span>Reagendar para Hoje ({todayStr})</span>
+              <span>Mover p/ Hoje</span>
+            </button>
+
+            <button
+              onClick={handleBatchReturnToPendingDate}
+              className="flex-1 sm:flex-initial px-3.5 py-2 bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-600 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              title="Retornar para a fila de Aguardando Data direto sem motivo"
+            >
+              <span className="material-symbols-outlined text-[16px] text-amber-800">replay</span>
+              <span>Aguardando Data ({selectedOrderIds.length})</span>
             </button>
           </div>
         </div>
@@ -576,21 +662,35 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
                 <div className="pt-3 border-t border-slate-100 space-y-2">
                   {!isReadOnly ? (
                     <>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-1.5">
                         <button
+                          type="button"
                           onClick={() => handleQuickBaixa(ord)}
-                          className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                          className="w-full py-2 px-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[11px] font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                          title="Concluir 100% da peça com baixa rápida"
                         >
-                          <span className="material-symbols-outlined text-[16px]">check</span>
-                          <span>Baixa Rápida</span>
+                          <span className="material-symbols-outlined text-[15px]">check</span>
+                          <span className="truncate">Baixa Rápida</span>
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleRescheduleToToday(ord)}
-                          className="w-full py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                          className="w-full py-2 px-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                          title="Mover produção para Hoje"
                         >
-                          <span className="material-symbols-outlined text-[16px]">today</span>
-                          <span>Mover p/ Hoje</span>
+                          <span className="material-symbols-outlined text-[15px]">today</span>
+                          <span className="truncate">Mover Hoje</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleReturnToPendingDate(ord)}
+                          className="w-full py-2 px-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer shadow-2xs"
+                          title="Retornar diretamente para Aguardando Data sem precisar relatar motivo"
+                        >
+                          <span className="material-symbols-outlined text-[15px] text-amber-700">replay</span>
+                          <span className="truncate">Aguard. Data</span>
                         </button>
                       </div>
 

@@ -881,6 +881,64 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
     onClose();
   };
 
+  // Direct return to Aguardando Data without requiring a reason
+  const handleDirectReturnToPendingDate = () => {
+    const nowStr = new Date().toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    const authorName = currentUser?.name || currentUser?.role || 'Gestor de Operações';
+    const effectiveStore = (editableStore || '').trim() || order.store;
+    const newStoreInitials = getStoreInitials(effectiveStore);
+
+    const returnLog: OrderStatusHistoryLog = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: nowStr,
+      author: authorName,
+      status: 'retornado_aguardando',
+      reason: 'Retornado para Aguardando Data (Direto)',
+      note: 'Retornado diretamente para a fila de Aguardando Data sem necessidade de relatar motivo.',
+      previousDate: order.productionDate || 'Aguardando Data',
+      actionType: 'return_to_pending',
+      cleanlinessScore,
+      organizationScore,
+      disciplineScore,
+    };
+
+    const updatedOrder: OrderItem = {
+      ...order,
+      store: effectiveStore,
+      storeInitials: newStoreInitials,
+      itemDescription: editableItemDescription.trim() || order.itemDescription,
+      deliveryDate: editableDeliveryDate.trim(),
+      imageUrl: modalImage || undefined,
+      images: modalImage ? [modalImage] : undefined,
+      executionStatus: 'pendente',
+      progress: 0,
+      column: 'nao_planejado',
+      productionDate: '',
+      isPendingReposition: false,
+      isClosedUncompleted: false,
+      closedAt: undefined,
+      closedBy: undefined,
+      delayReason: '',
+      pendingReason: '',
+      statusHistory: [returnLog, ...(order.statusHistory || [])],
+      cleanlinessScore,
+      organizationScore,
+      disciplineScore,
+    };
+
+    onUpdateOrder(updatedOrder);
+    saveOrderToFirestore(updatedOrder);
+    notifyOrderNotCompletedPendingDate(order.orderId, effectiveStore, 'Retornado para Aguardando Data', authorName);
+    onClose();
+  };
+
   const handleSave = () => {
     const nowStr = new Date().toLocaleString('pt-BR', {
       day: '2-digit',
@@ -892,7 +950,7 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
 
     const authorName = currentUser?.name || currentUser?.role || 'Gestor de Operações';
     const totalQty = order.quantity || 1;
-    const effectiveReason = selectedReason || (selectedStatus === 'concluido' ? '' : 'Sem motivo especificado');
+    const effectiveReason = selectedReason || (selectedStatus === 'concluido' ? '' : notCompletedAction === 'pending_date' ? 'Retornado para Aguardando Data' : 'Sem motivo especificado');
     const effectiveStore = (editableStore || '').trim() || order.store;
     const newStoreInitials = getStoreInitials(effectiveStore);
 
@@ -1714,6 +1772,32 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
                     </div>
                   </button>
                 </div>
+
+                {/* Fast Direct Action: Retornar para Aguardando Data direto sem motivo */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-2xl bg-amber-50/70 border border-amber-200/90 gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                      <span className="material-symbols-outlined text-[18px]">replay</span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                        <span>Retornar para &quot;Aguardando Data&quot;</span>
+                        <span className="bg-amber-200 text-amber-900 text-[10px] font-black px-1.5 py-0.2 rounded-md">Direto</span>
+                      </div>
+                      <div className="text-[11px] text-amber-800 leading-tight">
+                        Devolve a peça diretamente para a fila de espera sem precisar relatar motivo.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDirectReturnToPendingDate}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">assignment_return</span>
+                    <span>Retornar sem Motivo</span>
+                  </button>
+                </div>
               </div>
 
               {/* 5S Operational Evaluation Section */}
@@ -2107,10 +2191,21 @@ export const OrderStatusModal: React.FC<OrderStatusModalProps> = ({
               {/* SPECIFIC CONFIGURATION FOR NON-COMPLETED / RETORNADO */}
               {selectedStatus === 'nao_produzido' && (
                 <div className="space-y-3 bg-amber-50/50 p-4 rounded-2xl border border-amber-200">
-                  <label className="block text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[16px] text-amber-700">report_problem</span>
-                    <span>2. Motivo da Não Conclusão / Ocorrência</span>
-                  </label>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-[16px] text-amber-700">report_problem</span>
+                      <span>2. Motivo da Não Conclusão / Ocorrência</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleDirectReturnToPendingDate}
+                      className="px-2.5 py-1 bg-amber-200/80 hover:bg-amber-300 text-amber-950 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer border border-amber-300/80 shadow-2xs"
+                      title="Retornar diretamente para Aguardando Data sem precisar relatar motivo"
+                    >
+                      <span className="material-symbols-outlined text-[14px] text-amber-800">replay</span>
+                      <span>Retornar Direto sem Motivo</span>
+                    </button>
+                  </div>
 
                   <div className="flex flex-wrap gap-2">
                     {COMMON_REASONS.map((reason) => {
