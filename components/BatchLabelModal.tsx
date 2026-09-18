@@ -229,7 +229,7 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
       const cleanOpNum = (opNumber || '').replace(/#/g, '').trim();
       const cleanStore = (ord.store || '').trim().toUpperCase();
       const combinedOpStore = (cleanOpNum || cleanStore) ? `${cleanOpNum}${cleanStore}` : 'BC3026';
-      const operatorDisplayName = (ord.assignedOperatorName || 'CLEITON').trim().toUpperCase();
+      const operatorDisplayName = (ord.assignedOperatorName || '').trim().toUpperCase();
       const barcodeText = [cleanOpNum, cleanStore, ord.itemDescription].filter(Boolean).join(' - ') || (opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA');
 
       return (

@@ -248,7 +248,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
       const cleanOpNum = (opNumber || '').replace(/#/g, '').trim();
       const cleanStore = (clientName || '').trim().toUpperCase();
       const combinedOpStore = (cleanOpNum || cleanStore) ? `${cleanOpNum}${cleanStore}` : 'BC3026';
-      const operatorDisplayName = (operatorName || 'CLEITON').trim().toUpperCase();
+      const operatorDisplayName = (operatorName || '').trim().toUpperCase();
       const barcodeText = barcodeValue || [cleanOpNum, cleanStore, itemDesc].filter(Boolean).join(' - ') || (opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA');
 
       return (
