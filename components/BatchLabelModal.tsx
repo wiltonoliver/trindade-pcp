@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { OrderItem } from '@/types/factory';
 import { renderBarcodeSVG } from '@/lib/barcodeUtils';
 
@@ -9,15 +9,32 @@ interface BatchLabelModalProps {
   onClose: () => void;
   titleDate?: string;
   defaultCompanyHeader?: string;
+  autoPrint?: boolean;
 }
 
 export type LabelPreset = '100x30' | '100x50' | '100x150';
+
+export interface PrinterMargins {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+const DEFAULT_PRINTER = 'ZEBRA ZD220';
+const DEFAULT_MARGINS: PrinterMargins = {
+  left: 0,
+  top: 0,
+  right: 0,
+  bottom: 0,
+};
 
 export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
   orders,
   onClose,
   titleDate = 'Peças Concluídas',
   defaultCompanyHeader = '',
+  autoPrint = false,
 }) => {
   const [selectedPreset, setSelectedPreset] = useState<LabelPreset>('100x30');
   const [companyHeader, setCompanyHeader] = useState(defaultCompanyHeader);
@@ -28,6 +45,69 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>(
     orders.map((o) => o.id)
   );
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printStatusMessage, setPrintStatusMessage] = useState<string | null>(null);
+
+  // Sync selectedOrderIds when orders prop changes
+  useEffect(() => {
+    setSelectedOrderIds(orders.map((o) => o.id));
+  }, [orders]);
+
+  // Printer & Custom Margins (Defaults: ZEBRA ZD220 with Left=0, Top=0, Right=0, Bottom=0 for auto-centering)
+  const [selectedPrinter, setSelectedPrinter] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pcp_selected_printer');
+      if (saved && saved !== 'ZDESIGNER L3250') {
+        return saved;
+      }
+      return DEFAULT_PRINTER;
+    }
+    return DEFAULT_PRINTER;
+  });
+
+  const [margins, setMargins] = useState<PrinterMargins>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('pcp_printer_margins');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return {
+            left: Number(parsed.left ?? DEFAULT_MARGINS.left),
+            top: Number(parsed.top ?? DEFAULT_MARGINS.top),
+            right: Number(parsed.right ?? DEFAULT_MARGINS.right),
+            bottom: Number(parsed.bottom ?? DEFAULT_MARGINS.bottom),
+          };
+        }
+      } catch {
+        // ignore JSON parse error
+      }
+    }
+    return DEFAULT_MARGINS;
+  });
+
+  const handleUpdatePrinter = (printer: string) => {
+    setSelectedPrinter(printer);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pcp_selected_printer', printer);
+    }
+  };
+
+  const handleUpdateMargin = (key: keyof PrinterMargins, val: number) => {
+    const updated = { ...margins, [key]: Math.max(0, val) };
+    setMargins(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pcp_printer_margins', JSON.stringify(updated));
+    }
+  };
+
+  const handleResetDefaultMargins = () => {
+    setSelectedPrinter(DEFAULT_PRINTER);
+    setMargins(DEFAULT_MARGINS);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pcp_selected_printer', DEFAULT_PRINTER);
+      localStorage.setItem('pcp_printer_margins', JSON.stringify(DEFAULT_MARGINS));
+    }
+  };
 
   // Filter items based on selection checkbox in modal
   const itemsToPrint = orders.filter((o) => selectedOrderIds.includes(o.id));
@@ -60,154 +140,275 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
     }
   };
 
-  // Helper to trigger Zebra batch printing
+  // Build standalone printable HTML document for Zebra ZD220
+  const generatePrintHtml = () => {
+    let widthMm = '100mm';
+    let heightMm = '30mm';
+
+    if (selectedPreset === '100x50') {
+      heightMm = '50mm';
+    } else if (selectedPreset === '100x150') {
+      heightMm = '150mm';
+    }
+
+    const printContent = document.getElementById('batch-zebra-print-area');
+    const contentHtml = printContent ? printContent.innerHTML : '';
+    const printerTitle = selectedPrinter || DEFAULT_PRINTER;
+    const totalLabels = totalLabelsToPrint;
+    const firstOp = itemsToPrint[0]?.orderId || '';
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <title>${printerTitle} - ${firstOp ? `OP #${firstOp}` : 'Etiquetas'} (${totalLabels} etiquetas)</title>
+    <style>
+      @page {
+        size: ${widthMm} ${heightMm} !important;
+        margin: 0 !important;
+      }
+      @media print {
+        html, body {
+          width: ${widthMm} !important;
+          height: ${heightMm} !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #ffffff !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .no-print-bar { display: none !important; }
+        .zebra-page-item {
+          page-break-after: always !important;
+          page-break-inside: avoid !important;
+          break-after: page !important;
+          width: ${widthMm} !important;
+          height: ${heightMm} !important;
+          max-height: ${heightMm} !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+          margin: 0 auto !important;
+          padding: 0 !important;
+        }
+      }
+      *, ::before, ::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background: #0f172a;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+      .zebra-page-item {
+        box-sizing: border-box;
+        margin: 12px auto;
+        background: white;
+        width: ${widthMm};
+        height: ${heightMm};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: 4px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+      }
+      svg {
+        display: block !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="no-print-bar" style="text-align: center; font-family: sans-serif; background: #1e293b; padding: 14px 20px; border-bottom: 2px solid #3b82f6; position: sticky; top: 0; z-index: 100;">
+      <div style="font-size: 14px; font-weight: 800; color: #f8fafc; margin-bottom: 4px;">
+        🖨️ Impressora: <u>${printerTitle}</u> (Zebra ZD220) &bull; Formato: ${widthMm} x ${heightMm}
+      </div>
+      <div style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">
+        Total: <strong>${totalLabels} ${totalLabels === 1 ? 'etiqueta pronta' : 'etiquetas prontas'}</strong> &bull; Margens automáticas centralizadas (0mm)
+      </div>
+      <button onclick="window.print()" style="background: #2563eb; hover: #1d4ed8; color: white; border: none; padding: 10px 24px; font-weight: 800; border-radius: 8px; cursor: pointer; font-size: 13px; box-shadow: 0 2px 6px rgba(37,99,235,0.4);">
+        🖨️ CLIQUE PARA IMPRIMIR AGORA (Ctrl + P)
+      </button>
+    </div>
+    <div style="padding: 16px 0;">
+      ${contentHtml}
+    </div>
+    <script>
+      window.onload = function() {
+        setTimeout(function() {
+          try {
+            window.print();
+          } catch(e) {
+            console.error(e);
+          }
+        }, 350);
+      };
+    </script>
+  </body>
+</html>`;
+  };
+
+  // Open standalone print page in new tab
+  const handleOpenInNewTab = () => {
+    try {
+      const html = generatePrintHtml();
+      const newWin = window.open('', '_blank');
+      if (newWin) {
+        newWin.document.open();
+        newWin.document.write(html);
+        newWin.document.close();
+        newWin.focus();
+        setPrintStatusMessage('Página de etiquetas aberta em nova aba com diálogo de impressão pronto!');
+      } else {
+        // If popup was blocked, fallback to blob URL click
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          if (document.body.contains(a)) document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }, 2000);
+        setPrintStatusMessage('Página aberta em nova aba! Confirme a impressão na janela.');
+      }
+    } catch (err) {
+      console.error('Failed to open print tab:', err);
+      setPrintStatusMessage('Erro ao abrir nova aba. Verifique se popups estão autorizados.');
+    }
+  };
+
+  // Helper to trigger Zebra batch printing with exact margins
   const handlePrintBatch = () => {
     if (itemsToPrint.length === 0) return;
 
-    try {
-      const printContent = document.getElementById('batch-zebra-print-area');
-      if (!printContent) {
+    setIsPrinting(true);
+    setPrintStatusMessage(`Disparando impressão para a impressora ${selectedPrinter}...`);
+
+    let widthMm = '100mm';
+    let heightMm = '30mm';
+    if (selectedPreset === '100x50') {
+      heightMm = '50mm';
+    } else if (selectedPreset === '100x150') {
+      heightMm = '150mm';
+    }
+
+    const printContent = document.getElementById('batch-zebra-print-area');
+    const contentHtml = printContent ? printContent.innerHTML : '';
+
+    // Strategy 1: Direct in-window print with injected page size style and dedicated print portal
+    const executeInWindowPrint = () => {
+      try {
+        let printPortal = document.getElementById('zebra-inwindow-print-portal');
+        if (!printPortal) {
+          printPortal = document.createElement('div');
+          printPortal.id = 'zebra-inwindow-print-portal';
+          document.body.appendChild(printPortal);
+        }
+        printPortal.innerHTML = contentHtml;
+
+        let styleTag = document.getElementById('zebra-inwindow-print-style') as HTMLStyleElement;
+        if (!styleTag) {
+          styleTag = document.createElement('style');
+          styleTag.id = 'zebra-inwindow-print-style';
+          document.head.appendChild(styleTag);
+        }
+        styleTag.textContent = `
+          @media print {
+            @page {
+              size: ${widthMm} ${heightMm} !important;
+              margin: 0 !important;
+            }
+            body > *:not(#zebra-inwindow-print-portal) {
+              display: none !important;
+            }
+            #zebra-inwindow-print-portal {
+              display: block !important;
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              width: ${widthMm} !important;
+              background: #ffffff !important;
+              z-index: 99999999 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            .zebra-page-item {
+              page-break-after: always !important;
+              break-after: page !important;
+              page-break-inside: avoid !important;
+              width: ${widthMm} !important;
+              height: ${heightMm} !important;
+              display: flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              margin: 0 auto !important;
+              padding: 0 !important;
+              box-sizing: border-box !important;
+              overflow: hidden !important;
+            }
+          }
+        `;
+
+        const cleanup = () => {
+          if (printPortal && printPortal.parentNode) {
+            printPortal.parentNode.removeChild(printPortal);
+          }
+          if (styleTag && styleTag.parentNode) {
+            styleTag.parentNode.removeChild(styleTag);
+          }
+          setIsPrinting(false);
+        };
+
+        window.addEventListener('afterprint', cleanup, { once: true });
+        setTimeout(cleanup, 4000);
+
         window.print();
-        return;
+        return true;
+      } catch (err) {
+        console.warn('In-window print failed:', err);
+        setIsPrinting(false);
+        return false;
       }
+    };
 
-      let widthMm = '100mm';
-      let heightMm = '30mm';
+    // Execute direct window.print
+    executeInWindowPrint();
 
-      if (selectedPreset === '100x50') {
-        heightMm = '50mm';
-      } else if (selectedPreset === '100x150') {
-        heightMm = '150mm';
-      }
-
-      const totalLabels = totalLabelsToPrint;
-
-      const htmlDocument = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Impressão Zebra em Lote PCP (${totalLabels} etiquetas)</title>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <style>
-              @page {
-                size: ${widthMm} ${heightMm};
-                margin: 0;
-              }
-              @media print {
-                html, body {
-                  width: ${widthMm} !important;
-                  height: ${heightMm} !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  background: white !important;
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                }
-                .no-print-element { display: none !important; }
-                .zebra-page-item {
-                  page-break-after: always !important;
-                  page-break-inside: avoid !important;
-                  break-after: page !important;
-                  width: ${widthMm} !important;
-                  height: ${heightMm} !important;
-                  overflow: hidden !important;
-                  box-sizing: border-box !important;
-                  margin: 0 !important;
-                }
-              }
-              *, ::before, ::after {
-                box-sizing: border-box;
-              }
-              body {
-                margin: 0;
-                padding: 10px;
-                background: #f8fafc;
-                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-              }
-              .zebra-page-item {
-                box-sizing: border-box;
-                margin: 0 auto 10px auto;
-                background: white;
-                width: ${widthMm};
-                height: ${heightMm};
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                overflow: hidden;
-              }
-              svg {
-                display: block !important;
-                max-width: 100% !important;
-                max-height: 100% !important;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="no-print-element" style="text-align: center; margin-bottom: 12px; font-family: sans-serif;">
-              <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 12px 24px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 14px;">
-                🖨️ CONFIRMAR IMPRESSÃO ZEBRA (${totalLabels} ${totalLabels === 1 ? 'etiqueta' : 'etiquetas'})
-              </button>
-            </div>
-            ${printContent.innerHTML}
-            <script>
-              window.onload = function() {
-                setTimeout(function() {
-                  window.print();
-                }, 500);
-              };
-            </script>
-          </body>
-        </html>
-      `;
-
-      // Strategy 1: Open popup window
-      const printWin = window.open('', '_blank', 'width=900,height=700');
-      if (printWin) {
-        printWin.document.open();
-        printWin.document.write(htmlDocument);
-        printWin.document.close();
-        return;
-      }
-
-      // Strategy 2: Fallback to hidden iframe
-      let iframe = document.getElementById('zebra-batch-print-iframe') as HTMLIFrameElement;
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'zebra-batch-print-iframe';
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0px';
-        iframe.style.height = '0px';
-        iframe.style.border = '0';
-        document.body.appendChild(iframe);
-      }
-
-      const doc = iframe.contentWindow?.document || iframe.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(htmlDocument);
-        doc.close();
-        setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-        }, 500);
-      } else {
-        window.print();
-      }
-    } catch (err) {
-      console.error('Batch Print Fallback:', err);
-      window.print();
+    // In iframe environments (like Google AI Studio preview), window.print() is often blocked by browser sandbox.
+    // Also trigger standalone tab so user has a guaranteed working print dialog without hindrance.
+    const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+    if (isInIframe) {
+      setTimeout(() => {
+        handleOpenInNewTab();
+      }, 250);
     }
   };
+
+  // Automatically trigger printing if autoPrint was requested on open
+  const autoPrintedRef = useRef(false);
+  useEffect(() => {
+    if (autoPrint && !autoPrintedRef.current && itemsToPrint.length > 0) {
+      autoPrintedRef.current = true;
+      const timer = setTimeout(() => {
+        handlePrintBatch();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPrint, itemsToPrint]);
 
   // Render a single 100x30mm label item for batch
   const renderSingleLabel = (ord: OrderItem, copyIndex: number, totalCopies: number) => {
     const volText = isVolumeSequential ? `VOL ${copyIndex + 1}/${totalCopies}` : '';
     const headerTitle = companyHeader || (ord.store ? `CLI: ${ord.store}` : '');
     const showClientInBody = Boolean(companyHeader && ord.store);
-    const opNumber = ord.orderId || ord.id;
+    const opNumber = String(ord.orderId || ord.id || '');
     const cleanOp = opNumber.replace(/[^a-zA-Z0-9]/g, '');
     const todayStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
     const lotCode = `LOT-${todayStr}-${cleanOp.slice(-4)}`;
@@ -557,6 +758,119 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
             </div>
           </div>
 
+          {/* Printer & Custom Margins Setup (ZDESIGNER L3250) */}
+          <div className="bg-blue-50/70 border border-blue-200/90 rounded-2xl p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-200/60 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-700 text-lg">print</span>
+                <span className="text-xs font-black text-blue-950 uppercase tracking-wide">
+                  Configuração da Impressora & Margens Personalizadas
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-md uppercase">
+                  Padrão Ativo
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetDefaultMargins}
+                className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white hover:bg-blue-100/70 px-2.5 py-1 rounded-lg border border-blue-200 transition-colors flex items-center gap-1 cursor-pointer w-fit"
+                title="Restaurar padrão ZDESIGNER L3250 (Esq:0, Sup:4, Dir:0, Inf:4)"
+              >
+                <span className="material-symbols-outlined text-[13px]">refresh</span>
+                <span>Restaurar Padrão (E:0, S:4, D:0, I:4)</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+              {/* Printer selection */}
+              <div className="lg:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Impressora Selecionada:
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedPrinter}
+                    onChange={(e) => handleUpdatePrinter(e.target.value)}
+                    className="w-full pl-3 pr-8 py-1.5 bg-white border border-blue-300 rounded-xl text-xs font-black text-slate-900 focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  >
+                    <option value="ZDESIGNER L3250">ZDESIGNER L3250 (Padrão de Fábrica)</option>
+                    <option value="ZEBRA ZD220">ZEBRA ZD220</option>
+                    <option value="EPSON L3250">EPSON L3250</option>
+                    <option value="GENÉRICA / TÉRMICA">GENÉRICA / TÉRMICA DIRETA</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Margins: Esquerda */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Esquerda (mm):
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={margins.left}
+                  onChange={(e) => handleUpdateMargin('left', Number(e.target.value))}
+                  className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-xl text-xs font-bold text-slate-900 text-center focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Margins: Superior */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Superior (mm):
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={margins.top}
+                  onChange={(e) => handleUpdateMargin('top', Number(e.target.value))}
+                  className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-xl text-xs font-bold text-slate-900 text-center focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Margins: Direita */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Direita (mm):
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={margins.right}
+                  onChange={(e) => handleUpdateMargin('right', Number(e.target.value))}
+                  className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-xl text-xs font-bold text-slate-900 text-center focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Margins: Inferior */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                  Inferior (mm):
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={margins.bottom}
+                  onChange={(e) => handleUpdateMargin('bottom', Number(e.target.value))}
+                  className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-xl text-xs font-bold text-slate-900 text-center focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-[11px] text-blue-900 font-medium bg-blue-100/60 px-3 py-1.5 rounded-lg">
+              <span className="material-symbols-outlined text-[15px] text-blue-700">info</span>
+              <span>
+                As margens configuradas (<strong>Sup: {margins.top}mm, Inf: {margins.bottom}mm, Esq: {margins.left}mm, Dir: {margins.right}mm</strong>) e o perfil <strong>{selectedPrinter}</strong> são aplicados diretamente nas regras @page de impressão.
+              </span>
+            </div>
+          </div>
+
           {/* Selected Items List & Toggle All */}
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
@@ -659,26 +973,48 @@ export const BatchLabelModal: React.FC<BatchLabelModalProps> = ({
           </div>
         </div>
 
+        {/* Status Message if active */}
+        {printStatusMessage && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-xl px-4 py-2.5 text-xs font-semibold flex items-center gap-2 shrink-0">
+            <span className="material-symbols-outlined text-[18px] text-blue-600">print</span>
+            <span>{printStatusMessage}</span>
+          </div>
+        )}
+
         {/* Modal Footer Actions */}
-        <div className="flex items-center justify-between border-t border-slate-100 pt-4 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
-          >
-            Cancelar
-          </button>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 pt-4 shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <span className="text-[11px] text-slate-500 font-semibold hidden sm:inline">
+              Margens: 0mm (Centralizado ZD220)
+            </span>
+          </div>
 
           <button
             type="button"
-            disabled={itemsToPrint.length === 0}
+            disabled={itemsToPrint.length === 0 || isPrinting}
             onClick={handlePrintBatch}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black rounded-xl text-sm transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-blue-500/20"
+            className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-75 text-white font-black rounded-xl text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/25 active:scale-[0.98]"
           >
-            <span className="material-symbols-outlined text-lg">print</span>
-            <span>
-              Imprimir Lote Zebra ({totalLabelsToPrint} {totalLabelsToPrint === 1 ? 'Etiqueta' : 'Etiquetas'})
-            </span>
+            {isPrinting ? (
+              <>
+                <span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>
+                <span>Enviando para {selectedPrinter}...</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-lg">print</span>
+                <span>
+                  Imprimir na {selectedPrinter} ({totalLabelsToPrint} {totalLabelsToPrint === 1 ? 'Etiqueta' : 'Etiquetas'})
+                </span>
+              </>
+            )}
           </button>
         </div>
       </div>

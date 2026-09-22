@@ -22,10 +22,43 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
   preselectedOrderId = null,
   onClearPreselectedOrder,
 }) => {
+  const DEFAULT_PRINTER = 'ZEBRA ZD220';
+
   // Config States
   const [selectedPreset, setSelectedPreset] = useState<LabelPreset>('100x30');
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
   const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printStatusMessage, setPrintStatusMessage] = useState<string | null>(null);
+  const [selectedPrinter, setSelectedPrinter] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pcp_selected_printer');
+      if (saved && saved !== 'ZDESIGNER L3250') {
+        return saved;
+      }
+      return DEFAULT_PRINTER;
+    }
+    return DEFAULT_PRINTER;
+  });
+  const [margins, setMargins] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('pcp_printer_margins');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          return {
+            left: Number(parsed.left ?? 0),
+            top: Number(parsed.top ?? 0),
+            right: Number(parsed.right ?? 0),
+            bottom: Number(parsed.bottom ?? 0),
+          };
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return { left: 0, top: 0, right: 0, bottom: 0 };
+  });
   
   // Label Fields State
   const [companyHeader, setCompanyHeader] = useState('');
@@ -101,126 +134,242 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
     }
   };
 
-  // Helper to trigger Zebra Direct Print with iframe/popup fallback
+  // Build standalone printable HTML document (for new tab printing or export)
+  const generatePrintHtml = () => {
+    const widthMm = '100mm';
+    const heightMm = selectedPreset === '100x30' ? '30mm' : selectedPreset === '100x50' ? '50mm' : '150mm';
+    const printerTitle = selectedPrinter || DEFAULT_PRINTER;
+    const cleanOp = (opNumber || '').replace(/[^a-zA-Z0-9]/g, '');
+
+    const printContent = document.getElementById('zebra-print-source');
+    const contentHtml = printContent ? printContent.innerHTML : '';
+
+    return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${printerTitle} - ${cleanOp ? `OP #${cleanOp}` : 'Etiqueta'} (${copiesCount} etiquetas)</title>
+    <style>
+      @page {
+        size: ${widthMm} ${heightMm} !important;
+        margin: 0 !important;
+      }
+      @media print {
+        html, body {
+          width: ${widthMm} !important;
+          height: ${heightMm} !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #ffffff !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+        .no-print-element {
+          display: none !important;
+        }
+        .zebra-label-print-page {
+          page-break-after: always !important;
+          break-after: page !important;
+          page-break-inside: avoid !important;
+          width: ${widthMm} !important;
+          height: ${heightMm} !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          margin: 0 auto !important;
+          padding: 0 !important;
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+        }
+      }
+      *, ::before, ::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 10px;
+        background: #f8fafc;
+        font-family: Arial, sans-serif;
+      }
+      .zebra-label-print-page {
+        box-sizing: border-box;
+        margin: 0 auto 10px auto;
+        background: white;
+        width: ${widthMm};
+        height: ${heightMm};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="no-print-element" style="text-align: center; margin-bottom: 12px; font-family: sans-serif; background: #eff6ff; padding: 12px 16px; border-radius: 12px; border: 1.5px solid #bfdbfe; max-width: 620px; margin-left: auto; margin-right: auto;">
+      <div style="font-size: 13px; font-weight: 800; color: #1e3a8a; margin-bottom: 4px;">
+        🖨️ Impressora: <u>${printerTitle}</u>
+      </div>
+      <div style="font-size: 11px; color: #1e40af; margin-bottom: 8px;">
+        Formato: <strong>${widthMm} x ${heightMm}</strong> | Conteúdo centralizado automaticamente na Zebra ZD220
+      </div>
+      <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 22px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.12);">
+        🖨️ CONFIRMAR IMPRESSÃO NA ${printerTitle} (${copiesCount} ${copiesCount === 1 ? 'etiqueta' : 'etiquetas'})
+      </button>
+    </div>
+    ${contentHtml}
+    <script>
+      window.onload = function() {
+        setTimeout(function() {
+          window.print();
+        }, 300);
+      };
+    </script>
+  </body>
+</html>`;
+  };
+
+  // Open standalone print page in new tab (fail-safe for browser iframes/popups)
+  const handleOpenInNewTab = () => {
+    try {
+      const html = generatePrintHtml();
+      const newWin = window.open('', '_blank');
+      if (newWin) {
+        newWin.document.open();
+        newWin.document.write(html);
+        newWin.document.close();
+        newWin.focus();
+        setPrintStatusMessage('Página de etiquetas aberta em nova aba com diálogo de impressão pronto!');
+      } else {
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          if (document.body.contains(a)) document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }, 2000);
+        setPrintStatusMessage('Página aberta em nova aba! Confirme a impressão na janela.');
+      }
+      setTimeout(() => setPrintStatusMessage(null), 5000);
+    } catch (err) {
+      console.error('Failed to open print tab:', err);
+    }
+  };
+
+  // Dedicated Direct Print Logic for Zebra ZD220 using window.print()
   const handlePrint = () => {
     try {
-      const printContent = document.getElementById('zebra-print-area');
-      if (!printContent) {
-        window.print();
-        return;
-      }
+      setIsPrinting(true);
+      setPrintStatusMessage(`Disparando impressão direta para ${selectedPrinter}...`);
 
-      const pageSize = selectedPreset === '100x30' ? '100mm 30mm' : selectedPreset === '100x50' ? '100mm 50mm' : '100mm 150mm';
       const widthMm = '100mm';
       const heightMm = selectedPreset === '100x30' ? '30mm' : selectedPreset === '100x50' ? '50mm' : '150mm';
 
-      const htmlDocument = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Impressão Térmica Zebra ZD220</title>
-            <meta charset="utf-8">
-            <script src="https://cdn.tailwindcss.com"></script>
-            <style>
-              @page {
-                size: ${pageSize};
-                margin: 0;
-              }
-              @media print {
-                html, body {
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  background: #ffffff !important;
-                  -webkit-print-color-adjust: exact !important;
-                  print-color-adjust: exact !important;
-                }
-                .zebra-label-item {
-                  page-break-after: always !important;
-                  break-after: page !important;
-                  page-break-inside: avoid !important;
-                  margin: 0 !important;
-                  padding: 0 !important;
-                  width: ${widthMm} !important;
-                  height: ${heightMm} !important;
-                }
-                .no-print-element {
-                  display: none !important;
-                }
-              }
-              body {
-                margin: 0;
-                padding: 10px;
-                background: #f8fafc;
-                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-              }
-              .zebra-label-item {
-                box-sizing: border-box;
-                margin: 0 auto 10px auto;
-                background: white;
-                width: ${widthMm};
-                height: ${heightMm};
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="no-print-element" style="text-align: center; margin-bottom: 12px; font-family: sans-serif;">
-              <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 20px; font-weight: bold; border-radius: 8px; cursor: pointer;">
-                🖨️ CONFIRMAR IMPRESSÃO ZEBRA (${copiesCount} ${copiesCount === 1 ? 'etiqueta' : 'etiquetas'})
-              </button>
-            </div>
-            ${printContent.innerHTML}
-            <script>
-              window.onload = function() {
-                setTimeout(function() {
-                  window.print();
-                }, 500);
-              };
-            </script>
-          </body>
-        </html>
+      // 1. Prepare dedicated in-window print portal directly attached to body
+      let printPortal = document.getElementById('zebra-direct-print-portal');
+      if (!printPortal) {
+        printPortal = document.createElement('div');
+        printPortal.id = 'zebra-direct-print-portal';
+        document.body.appendChild(printPortal);
+      }
+
+      const sourceContent = document.getElementById('zebra-print-source');
+      if (sourceContent) {
+        printPortal.innerHTML = sourceContent.innerHTML;
+      }
+
+      // 2. Inject dedicated @media print CSS to ignore UI elements and center content on Zebra ZD220
+      let styleTag = document.getElementById('zebra-direct-print-style') as HTMLStyleElement;
+      if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'zebra-direct-print-style';
+        document.head.appendChild(styleTag);
+      }
+
+      styleTag.textContent = `
+        @media print {
+          @page {
+            size: ${widthMm} ${heightMm} !important;
+            margin: 0 !important;
+          }
+          html, body {
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          /* Ignore all application UI elements during print */
+          body > *:not(#zebra-direct-print-portal) {
+            display: none !important;
+          }
+          .no-print, header, aside, nav, footer, button {
+            display: none !important;
+          }
+          #zebra-direct-print-portal {
+            display: block !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            background: #ffffff !important;
+            z-index: 99999999 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .zebra-label-print-page {
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            width: ${widthMm} !important;
+            height: ${heightMm} !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+          }
+        }
       `;
 
-      // Strategy 1: Try window.open first (opens clean popup window outside iframe)
-      const printWin = window.open('', '_blank', 'width=850,height=650');
-      if (printWin) {
-        printWin.document.open();
-        printWin.document.write(htmlDocument);
-        printWin.document.close();
-        return;
-      }
+      // 3. Cleanup handler when print dialog closes
+      const cleanup = () => {
+        if (printPortal && printPortal.parentNode) {
+          printPortal.parentNode.removeChild(printPortal);
+        }
+        if (styleTag && styleTag.parentNode) {
+          styleTag.parentNode.removeChild(styleTag);
+        }
+        setIsPrinting(false);
+        setPrintStatusMessage(null);
+      };
 
-      // Strategy 2: If window.open is blocked by pop-up blocker in iframe, use hidden iframe
-      let iframe = document.getElementById('zebra-print-iframe') as HTMLIFrameElement;
-      if (!iframe) {
-        iframe = document.createElement('iframe');
-        iframe.id = 'zebra-print-iframe';
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0px';
-        iframe.style.height = '0px';
-        iframe.style.border = '0';
-        document.body.appendChild(iframe);
-      }
+      window.addEventListener('afterprint', cleanup, { once: true });
+      setTimeout(cleanup, 4000);
 
-      const doc = iframe.contentWindow?.document || iframe.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(htmlDocument);
-        doc.close();
+      // 4. Trigger direct window.print()
+      window.print();
+
+      // In sandboxed iframes (e.g. AI Studio preview), window.print() is often suppressed without user notice.
+      // Automatically invoke new tab so the user is never left hanging.
+      const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
+      if (isInIframe) {
         setTimeout(() => {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-        }, 500);
-      } else {
-        window.print();
+          handleOpenInNewTab();
+        }, 250);
       }
     } catch (err) {
-      console.error('Print trigger fallback:', err);
-      window.print();
+      console.error('Direct print failed, fallback:', err);
+      setIsPrinting(false);
+      handleOpenInNewTab();
     }
   };
 
@@ -480,42 +629,60 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Dynamic Thermal Print Engine CSS Injection */}
-      <style jsx global>{`
-        @media print {
-          /* Hide all UI shell elements during print */
-          body * {
-            visibility: hidden;
-          }
-          #zebra-print-area, #zebra-print-area * {
-            visibility: visible;
-          }
-          #zebra-print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-          }
-          .no-print {
-            display: none !important;
-          }
-
-          /* Exact Zebra Thermal Page Size */
-          @page {
-            size: ${selectedPreset === '100x30' ? '100mm 30mm' : selectedPreset === '100x50' ? '100mm 50mm' : '100mm 150mm'};
-            margin: 0;
-          }
-
-          .zebra-label-item {
-            page-break-after: always;
-            break-after: page;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-        }
-      `}</style>
+      {/* Dedicated Zebra ZD220 Thermal Print Style (Ignores UI elements, auto-centers labels) */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                size: ${selectedPreset === '100x30' ? '100mm 30mm' : selectedPreset === '100x50' ? '100mm 50mm' : '100mm 150mm'} !important;
+                margin: 0 !important;
+              }
+              html, body {
+                width: 100% !important;
+                height: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              /* Ignore all UI elements */
+              body > *:not(#zebra-direct-print-portal) {
+                display: none !important;
+              }
+              .no-print, header, aside, nav, footer, button {
+                display: none !important;
+              }
+              #zebra-direct-print-portal {
+                display: block !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                background: #ffffff !important;
+                z-index: 99999999 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              .zebra-label-print-page {
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                width: 100mm !important;
+                height: ${selectedPreset === '100x30' ? '30mm' : selectedPreset === '100x50' ? '50mm' : '150mm'} !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+              }
+            }
+          `,
+        }}
+      />
 
       {/* Header Banner */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
@@ -551,10 +718,20 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
           <button
             type="button"
             onClick={handlePrint}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm text-xs transition-all flex items-center gap-2 cursor-pointer"
+            disabled={isPrinting}
+            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-75 text-white font-bold rounded-xl shadow-sm text-xs transition-all flex items-center gap-2 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[18px]">print</span>
-            <span>Imprimir {copiesCount} {copiesCount === 1 ? 'Etiqueta' : 'Etiquetas'}</span>
+            {isPrinting ? (
+              <>
+                <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                <span>Enviando...</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-[18px]">print</span>
+                <span>Imprimir {copiesCount} {copiesCount === 1 ? 'Etiqueta' : 'Etiquetas'}</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -818,23 +995,51 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
               </div>
             </div>
 
-            {/* Action Print Button */}
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl text-sm transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[22px]">print</span>
-              <span>ENVIAR PARA IMPRESSORA ZEBRA</span>
-            </button>
+            {/* Action Print Button Group */}
+            <div className="space-y-2 pt-1">
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={isPrinting}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-75 text-white font-black rounded-xl text-sm transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-[0.98]"
+              >
+                {isPrinting ? (
+                  <>
+                    <span className="material-symbols-outlined text-[22px] animate-spin">progress_activity</span>
+                    <span>ENVIANDO PARA ZEBRA ZD220...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[22px]">print</span>
+                    <span>ENVIAR PARA IMPRESSORA ZEBRA (ZD220)</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenInNewTab}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Abre a visualização de impressão numa nova janela/aba caso seu navegador bloqueie diálogos diretos"
+              >
+                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                <span>Abrir em Nova Aba (Alternativa de Impressão)</span>
+              </button>
+
+              {printStatusMessage && (
+                <div className="p-2.5 bg-blue-900/60 border border-blue-600/40 rounded-xl text-[11px] text-blue-200 text-center font-medium animate-fadeIn">
+                  {printStatusMessage}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Hidden Print Container specifically targeted by @media print */}
-      <div id="zebra-print-area" className="hidden print:block">
+      {/* Hidden Print Container specifically targeted as source for direct printing and new tab */}
+      <div id="zebra-print-source" style={{ display: 'none' }}>
         {Array.from({ length: copiesCount }).map((_, copyIndex) => (
-          <div key={copyIndex} className="zebra-label-item">
+          <div key={copyIndex} className="zebra-label-print-page">
             {renderLabelContent(copyIndex)}
           </div>
         ))}

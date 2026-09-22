@@ -324,10 +324,13 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
   };
 
   // Open Batch Label Printing Modal
-  const handleOpenBatchLabels = (items: OrderItem[], dateLabel: string) => {
+  const [batchModalAutoPrint, setBatchModalAutoPrint] = useState(false);
+
+  const handleOpenBatchLabels = (items: OrderItem[], dateLabel: string, autoPrint = false) => {
     if (items.length === 0) return;
     setBatchModalItems(items);
     setBatchModalTitleDate(dateLabel);
+    setBatchModalAutoPrint(autoPrint);
     setIsBatchModalOpen(true);
   };
 
@@ -1029,9 +1032,9 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenBatchLabels([ord], `OP #${ord.orderId}`);
+                              handleOpenBatchLabels([ord], `OP #${ord.orderId}`, true);
                             }}
-                            title="Imprimir etiqueta Zebra desta peça"
+                            title="Gerar e imprimir etiqueta na ZEBRA ZD220 (Conteúdo centralizado automaticamente)"
                             className="px-2 py-1 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 rounded-lg font-bold text-[11px] transition-colors inline-flex items-center gap-1 cursor-pointer shadow-2xs"
                           >
                             <span className="material-symbols-outlined text-[14px]">qr_code_2</span>
@@ -1232,9 +1235,11 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
         <BatchLabelModal
           orders={batchModalItems}
           titleDate={batchModalTitleDate}
+          autoPrint={batchModalAutoPrint}
           onClose={() => {
             setIsBatchModalOpen(false);
             setBatchModalItems([]);
+            setBatchModalAutoPrint(false);
           }}
         />
       )}
