@@ -5,6 +5,7 @@ import { OrderItem, KanbanColumnId, PriorityLevel, AssemblyOperator, UserProfile
 import { OrderStatusModal } from './OrderStatusModal';
 import { deleteOrderFromFirestore, saveOrderToFirestore, isMockOperator } from '@/lib/firestoreSync';
 import { normalizeDateToDDMMYYYY, isDateBefore, isOrderOverdueForCheckoff } from '@/lib/dateUtils';
+import { matchesMultiTermSearch } from '@/lib/utils';
 import {
   notifyOrderReceived,
   notifyProductionScheduled,
@@ -257,12 +258,9 @@ export const PlanningDashboard: React.FC<PlanningDashboardProps> = ({
   );
 
   const filteredOrders = activeOrders.filter((ord) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      ord.orderId.toLowerCase().includes(q) ||
-      ord.store.toLowerCase().includes(q) ||
-      ord.itemDescription.toLowerCase().includes(q)
+    return matchesMultiTermSearch(
+      [ord.orderId, ord.store, ord.itemDescription, ord.delayReason, ord.pendingReason, ord.assignedOperatorName, ord.assignedOperatorCode],
+      searchQuery
     );
   });
 

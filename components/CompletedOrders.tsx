@@ -7,6 +7,7 @@ import { BatchLabelModal } from './BatchLabelModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore } from '@/lib/firestoreSync';
 import { notifyOrderReopened, notifyOrderDeleted } from '@/lib/notificationService';
 import { extractDMYDate } from '@/lib/dateUtils';
+import { matchesMultiTermSearch } from '@/lib/utils';
 
 const MONTH_NAMES_PT = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -266,7 +267,7 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
 
   // Apply search, store & date filters
   const filteredCompletedOrders = useMemo(() => {
-    const query = (localSearch || externalSearchQuery).toLowerCase().trim();
+    const query = (localSearch || externalSearchQuery).trim();
     return completedOrders.filter((ord) => {
       // Status filter
       if (selectedStatusFilter === 'concluido' && ord.isClosedUncompleted) {
@@ -291,15 +292,21 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
         }
       }
 
-      // Search query filter (OP ID, Store, Item Description, Operator Code/Name)
+      // Search query filter (supports multiple terms with ';')
       if (query) {
-        const matchId = ord.orderId.toLowerCase().includes(query);
-        const matchStore = ord.store.toLowerCase().includes(query);
-        const matchDesc = ord.itemDescription.toLowerCase().includes(query);
-        const matchOperator =
-          (ord.assignedOperatorName && ord.assignedOperatorName.toLowerCase().includes(query)) ||
-          (ord.assignedOperatorCode && ord.assignedOperatorCode.toLowerCase().includes(query));
-        return matchId || matchStore || matchDesc || matchOperator;
+        return matchesMultiTermSearch(
+          [
+            ord.orderId,
+            ord.store,
+            ord.itemDescription,
+            ord.delayReason,
+            ord.pendingReason,
+            ord.assignedOperatorName,
+            ord.assignedOperatorCode,
+            ord.productionDate,
+          ],
+          query
+        );
       }
 
       return true;
@@ -517,7 +524,8 @@ export const CompletedOrders: React.FC<CompletedOrdersProps> = ({
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            placeholder="Buscar por N° do Pedido / OP, Loja, Descrição da Esquadria ou Montador..."
+            placeholder="Buscar OP, Loja, Peça, Montador (use ';' para múltiplos)..."
+            title="Dica: Pesquise vários termos usando ponto e vírgula (;), ex: VITRO; LAMBRIL; BALCÃO"
             className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
           />
           {localSearch && (

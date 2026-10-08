@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { MaterialRequest, MaterialPriority, MaterialRequestStatus, UserProfile, OrderItem } from '@/types/factory';
 import { compressImageFile } from '@/lib/imageUtils';
+import { matchesMultiTermSearch } from '@/lib/utils';
 import { ImageLightboxModal } from './ImageLightboxModal';
 import {
   notifyMaterialRequested,
@@ -152,16 +153,13 @@ export const RawMaterialRequests: React.FC<RawMaterialRequestsProps> = ({
       // Priority filter
       if (selectedPriority !== 'all' && req.priority !== selectedPriority) return false;
 
-      // Search query
-      const effectiveSearch = (searchQuery.trim() || externalSearchQuery.trim()).toLowerCase();
+      // Search query (supports multiple terms separated by ';')
+      const effectiveSearch = (searchQuery.trim() || externalSearchQuery.trim());
       if (effectiveSearch) {
-        const matchCode = req.code?.toLowerCase().includes(effectiveSearch);
-        const matchName = req.materialName?.toLowerCase().includes(effectiveSearch);
-        const matchSector = req.sector?.toLowerCase().includes(effectiveSearch);
-        const matchOp = req.linkedOrderId?.toLowerCase().includes(effectiveSearch);
-        const matchSupplier = req.supplier?.toLowerCase().includes(effectiveSearch);
-        const matchRequester = req.requestedBy?.toLowerCase().includes(effectiveSearch);
-        return matchCode || matchName || matchSector || matchOp || matchSupplier || matchRequester;
+        return matchesMultiTermSearch(
+          [req.code, req.materialName, req.sector, req.linkedOrderId, req.supplier, req.requestedBy, req.notes, req.purchaseNotes, req.receiptNotes],
+          effectiveSearch
+        );
       }
 
       return true;
@@ -570,7 +568,8 @@ export const RawMaterialRequests: React.FC<RawMaterialRequestsProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por código, material, setor, OP..."
+              placeholder="Buscar código, material, setor, OP (use ';' para múltiplos)..."
+              title="Dica: Pesquise vários termos usando ponto e vírgula (;), ex: PERFIL; VIDRO; PARAFUSO"
               className="w-full pl-9 pr-3.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none placeholder:text-slate-400"
             />
             {searchQuery && (

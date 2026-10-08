@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { OrderItem, UserProfile } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
+import { matchesMultiTermSearch } from '@/lib/utils';
 
 interface ReplanningHistoryProps {
   orders?: OrderItem[];
@@ -93,18 +94,14 @@ export const ReplanningHistory: React.FC<ReplanningHistoryProps> = ({
     return logs;
   }, [orders]);
 
-  // Filtered problem history by search query
+  // Filtered problem history by search query (supports multiple terms separated by ';')
   const filteredHistory = useMemo(() => {
     if (!searchQuery) return problemLogs;
-    const q = searchQuery.toLowerCase();
-    return problemLogs.filter(
-      (item) =>
-        item.orderCode.toLowerCase().includes(q) ||
-        item.store.toLowerCase().includes(q) ||
-        item.reason.toLowerCase().includes(q) ||
-        item.itemDescription.toLowerCase().includes(q) ||
-        item.author.toLowerCase().includes(q) ||
-        (item.note && item.note.toLowerCase().includes(q))
+    return problemLogs.filter((item) =>
+      matchesMultiTermSearch(
+        [item.orderCode, item.store, item.reason, item.itemDescription, item.author, item.note],
+        searchQuery
+      )
     );
   }, [problemLogs, searchQuery]);
 

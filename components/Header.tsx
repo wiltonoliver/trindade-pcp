@@ -30,6 +30,10 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
+  const searchTerms = searchQuery
+    ? searchQuery.split(';').map((t) => t.trim()).filter(Boolean)
+    : [];
+
   const userName = currentUser?.name || 'Wilton Oliver';
   const userRole = currentUser?.role || 'Gerente de Operações';
   const firstLetter = userName.trim().charAt(0).toUpperCase() || 'W';
@@ -57,15 +61,27 @@ export const Header: React.FC<HeaderProps> = ({
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => setIsSearchFocused(false)}
-            placeholder="Pesquisar..."
-            className={`w-full bg-slate-100 border-none rounded-full py-2 pl-9 pr-7 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${
+            placeholder="Pesquisar (use ';' para múltiplos ex: VITRO; BALCÃO)..."
+            title="Dica: Pesquise vários termos ao mesmo tempo separando-os por ';' (ex: VITRO; LAMBRIL; BALCÃO)"
+            className={`w-full bg-slate-100 border-none rounded-full py-2 pl-9 ${
+              searchTerms.length > 1 ? 'pr-24' : searchQuery ? 'pr-8' : 'pr-4'
+            } text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${
               isSearchFocused ? 'shadow-xs' : ''
             }`}
           />
+          {searchTerms.length > 1 && (
+            <span
+              className="absolute right-8 top-1/2 -translate-y-1/2 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full pointer-events-none whitespace-nowrap hidden sm:inline"
+              title={`Filtrando por ${searchTerms.length} termos: ${searchTerms.join(' OU ')}`}
+            >
+              {searchTerms.length} termos
+            </span>
+          )}
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+              title="Limpar busca"
             >
               <span className="material-symbols-outlined text-[16px]">close</span>
             </button>

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { OrderItem, ExecutionStatus } from '@/types/factory';
 import { OrderStatusModal } from './OrderStatusModal';
-import { sanitizeUnit } from '@/lib/utils';
+import { sanitizeUnit, matchesMultiTermSearch } from '@/lib/utils';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
 import { notifyOrderCompleted } from '@/lib/notificationService';
 
@@ -23,17 +23,12 @@ export const DailyProductivity: React.FC<DailyProductivityProps> = ({
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [selectedOrderForStatusModal, setSelectedOrderForStatusModal] = useState<OrderItem | null>(null);
 
-  // Filter orders for "Hoje" or general scheduled
+  // Filter orders for "Hoje" or general scheduled (supports multiple terms with ';')
   const todayOrders = orders.filter((ord) => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        ord.orderId.toLowerCase().includes(q) ||
-        ord.store.toLowerCase().includes(q) ||
-        ord.itemDescription.toLowerCase().includes(q)
-      );
-    }
-    return true;
+    return matchesMultiTermSearch(
+      [ord.orderId, ord.store, ord.itemDescription, ord.delayReason, ord.pendingReason, ord.assignedOperatorName, ord.assignedOperatorCode, ord.productionDate],
+      searchQuery
+    );
   });
 
   const handleSetStatus = (

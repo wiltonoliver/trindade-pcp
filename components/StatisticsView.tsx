@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { OrderItem, AssemblyOperator, ExecutionStatus } from '@/types/factory';
+import { matchesMultiTermSearch } from '@/lib/utils';
 
 // Helper Speedometer Gauge Chart for Excel Dashboard
 const SpeedometerGauge: React.FC<{ percentage: number }> = ({ percentage }) => {
@@ -160,7 +161,7 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
   const [selectedOperatorForModal, setSelectedOperatorForModal] = useState<AssemblyOperator | null>(null);
   const [assignmentToast, setAssignmentToast] = useState<string | null>(null);
 
-  const searchTerm = (localSearch || searchQuery).toLowerCase().trim();
+  const searchTerm = (localSearch || searchQuery).trim();
 
   // Helper to compute delivered pieces for an order item
   const getDeliveredQuantity = (item: OrderItem): number => {
@@ -312,13 +313,11 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
   const filteredOperators = operators.filter((op) => {
     const metrics = getOperatorMetrics(op.id);
 
-    // Search filter
+    // Search filter (supports multiple terms separated by ';')
     if (searchTerm) {
-      const matchName = op.name.toLowerCase().includes(searchTerm);
-      const matchRole = op.role.toLowerCase().includes(searchTerm);
-      const matchCode = op.code.toLowerCase().includes(searchTerm);
-      const matchSpecialty = op.specialty.toLowerCase().includes(searchTerm);
-      if (!matchName && !matchRole && !matchCode && !matchSpecialty) return false;
+      if (!matchesMultiTermSearch([op.name, op.role, op.code, op.specialty, op.shift], searchTerm)) {
+        return false;
+      }
     }
 
     // Shift filter
@@ -1462,10 +1461,11 @@ export const StatisticsView: React.FC<StatisticsViewProps> = ({
               <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-lg">search</span>
               <input
                 type="text"
-                placeholder="Buscar montador..."
+                placeholder="Buscar montador (use ';' para vários)..."
+                title="Dica: Pesquise vários termos usando ponto e vírgula (;), ex: JOÃO; PEDRO; CORTE"
                 value={localSearch}
                 onChange={(e) => setLocalSearch(e.target.value)}
-                className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-48"
+                className="pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-56"
               />
             </div>
 

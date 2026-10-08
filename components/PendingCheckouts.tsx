@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { OrderItem, UserProfile, AssemblyOperator, Store, OrderStatusHistoryLog } from '@/types/factory';
 import { isOrderOverdueForCheckoff, normalizeDateToDDMMYYYY, getLocalDateFormatted } from '@/lib/dateUtils';
+import { matchesMultiTermSearch } from '@/lib/utils';
 import { OrderStatusModal } from './OrderStatusModal';
 import { saveOrderToFirestore } from '@/lib/firestoreSync';
 import {
@@ -77,16 +78,13 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
         if (norm !== selectedDateFilter) return false;
       }
 
-      // Search term
-      const query = (localSearch || searchQuery).trim().toLowerCase();
+      // Search term (supports multiple terms separated by ';')
+      const query = (localSearch || searchQuery).trim();
       if (query) {
-        const matchId = ord.orderId?.toLowerCase().includes(query);
-        const matchStore = ord.store?.toLowerCase().includes(query);
-        const matchDesc = ord.itemDescription?.toLowerCase().includes(query);
-        const matchOp = ord.assignedOperatorName?.toLowerCase().includes(query);
-        if (!matchId && !matchStore && !matchDesc && !matchOp) {
-          return false;
-        }
+        return matchesMultiTermSearch(
+          [ord.orderId, ord.store, ord.itemDescription, ord.delayReason, ord.pendingReason, ord.assignedOperatorName, ord.assignedOperatorCode, ord.productionDate],
+          query
+        );
       }
 
       return true;
@@ -453,7 +451,8 @@ export const PendingCheckouts: React.FC<PendingCheckoutsProps> = ({
               type="text"
               value={localSearch}
               onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Buscar por OP, loja, item ou montador..."
+              placeholder="Buscar OP, loja, item, montador (use ';' para múltiplos)..."
+              title="Dica: Pesquise vários termos usando ponto e vírgula (;), ex: VITRO; LAMBRIL; BALCÃO"
               className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50/50 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:bg-white transition-all"
             />
             {localSearch && (

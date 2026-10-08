@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { OrderItem, Store, AssemblyOperator, UserProfile } from '@/types/factory';
 import { TrindadeLogo } from './TrindadeLogo';
 import { OrderStatusModal } from './OrderStatusModal';
-import { sanitizeUnit } from '@/lib/utils';
+import { sanitizeUnit, matchesMultiTermSearch } from '@/lib/utils';
 import { isMockOperator } from '@/lib/firestoreSync';
 
 interface ReportsPageProps {
@@ -144,14 +144,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
         if (isCompleted || order.isClosedUncompleted || order.progress > 0) return false;
       }
 
-      // 4. Search Query
+      // 4. Search Query (supports multiple terms separated by ';')
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesQuery =
-          order.orderId.toLowerCase().includes(q) ||
-          order.itemDescription.toLowerCase().includes(q) ||
-          order.store.toLowerCase().includes(q) ||
-          (order.assignedOperatorName && order.assignedOperatorName.toLowerCase().includes(q));
+        const matchesQuery = matchesMultiTermSearch(
+          [order.orderId, order.itemDescription, order.store, order.delayReason, order.pendingReason, order.assignedOperatorName, order.assignedOperatorCode],
+          searchQuery
+        );
         if (!matchesQuery) return false;
       }
 
@@ -1077,7 +1075,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filtrar por código ou descrição..."
+                placeholder="Filtrar código, item, loja (use ';' para múltiplos)..."
+                title="Dica: Pesquise vários termos usando ponto e vírgula (;), ex: VITRO; LAMBRIL; BALCÃO"
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>

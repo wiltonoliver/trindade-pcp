@@ -6,6 +6,7 @@ import { OrderStatusModal } from './OrderStatusModal';
 import { saveOrderToFirestore, deleteOrderFromFirestore, saveStoreToFirestore } from '@/lib/firestoreSync';
 import { notifyProductionDateSet, notifyOrderDeleted } from '@/lib/notificationService';
 import { normalizeDateToDDMMYYYY } from '@/lib/dateUtils';
+import { matchesMultiTermSearch } from '@/lib/utils';
 import { compressImageFile } from '@/lib/imageUtils';
 
 interface PendingDateOrdersProps {
@@ -220,14 +221,12 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
         if (endComp !== null && orderDateComp > endComp) return false;
       }
 
-      const q = (searchQuery || localSearch).trim().toLowerCase();
+      const q = (searchQuery || localSearch).trim();
       if (!q) return true;
 
-      return (
-        ord.orderId.toLowerCase().includes(q) ||
-        ord.store.toLowerCase().includes(q) ||
-        ord.itemDescription.toLowerCase().includes(q) ||
-        (ord.deliveryDate && ord.deliveryDate.toLowerCase().includes(q))
+      return matchesMultiTermSearch(
+        [ord.orderId, ord.store, ord.itemDescription, ord.delayReason, ord.pendingReason, ord.deliveryDate],
+        q
       );
     });
   }, [
@@ -643,7 +642,8 @@ export const PendingDateOrders: React.FC<PendingDateOrdersProps> = ({
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            placeholder="Buscar por OP, loja, peça ou data..."
+            placeholder="Buscar OP, loja, peça (use ';' para múltiplos)..."
+            title="Dica: Pesquise vários termos usando ponto e vírgula (;), ex: VITRO; LAMBRIL; BALCÃO"
             className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
           />
           {localSearch && (
