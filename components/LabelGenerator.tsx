@@ -1,9 +1,29 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import {
+  Layers,
+  RefreshCw,
+  Trash2,
+  User,
+  Calendar,
+  FileText,
+  Code2,
+  Database,
+  Barcode,
+  Printer,
+  Copy,
+  Check,
+  Download,
+  Plus,
+  Search,
+  CheckCircle2,
+  LayoutGrid,
+} from 'lucide-react';
 import { OrderItem, AssemblyOperator, Store } from '@/types/factory';
 import { BatchLabelModal } from './BatchLabelModal';
 import { renderBarcodeSVG } from '@/lib/barcodeUtils';
+import { matchesMultiTermSearch } from '@/lib/utils';
 
 interface LabelGeneratorProps {
   orders: OrderItem[];
@@ -13,134 +33,398 @@ interface LabelGeneratorProps {
   onClearPreselectedOrder?: () => void;
 }
 
-export type LabelPreset = '100x30' | '100x50' | '50x30' | '100x150';
+export type LabelPreset = '100x30' | '100x220';
+export type ItemFontSize = 'PEQ' | 'MÉD' | 'GRD';
+type RightPanelTab = 'labels' | 'zpl' | 'database';
+
+interface ParsedLabelItem {
+  id: string;
+  rawLine: string;
+  code: string;
+  description: string;
+  quantity: number;
+}
+
+interface PhysicalLabelInstance {
+  key: string;
+  item: ParsedLabelItem;
+  copyIndex: number;
+  totalCopies: number;
+}
+
+const getTodayFormatted = (): string => {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = now.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+};
+
+const dmyToIso = (dmy: string): string => {
+  const match = dmy.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return '';
+  return `${match[3]}-${match[2]}-${match[1]}`;
+};
+
+const isoToDmy = (iso: string): string => {
+  const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  return `${match[3]}/${match[2]}/${match[1]}`;
+};
+
+const sanitizeZplText = (str: string): string => {
+  return (str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\^~]/g, ' ')
+    .toUpperCase()
+    .trim();
+};
 
 export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
   orders,
   operators = [],
-  stores = [],
   preselectedOrderId = null,
   onClearPreselectedOrder,
 }) => {
   const DEFAULT_PRINTER = 'ZEBRA ZD220';
 
-  // Config States
-  const [selectedPreset, setSelectedPreset] = useState<LabelPreset>('100x30');
-  const [selectedOrderId, setSelectedOrderId] = useState<string>('');
-  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
-  const [isPrinting, setIsPrinting] = useState(false);
-  const [printStatusMessage, setPrintStatusMessage] = useState<string | null>(null);
-  const [selectedPrinter, setSelectedPrinter] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pcp_selected_printer');
-      if (saved && saved !== 'ZDESIGNER L3250') {
-        return saved;
-      }
-      return DEFAULT_PRINTER;
-    }
-    return DEFAULT_PRINTER;
-  });
-  const [margins, setMargins] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('pcp_printer_margins');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          return {
-            left: Number(parsed.left ?? 0),
-            top: Number(parsed.top ?? 0),
-            right: Number(parsed.right ?? 0),
-            bottom: Number(parsed.bottom ?? 0),
-          };
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return { left: 0, top: 0, right: 0, bottom: 0 };
-  });
-  
-  // Label Fields State
-  const [companyHeader, setCompanyHeader] = useState('');
-  const [opNumber, setOpNumber] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [itemDesc, setItemDesc] = useState('');
-  const [quantity, setQuantity] = useState<number | string>(1);
-  const [unit, setUnit] = useState('UN');
-  const [productionDate, setProductionDate] = useState('');
-  const [operatorName, setOperatorName] = useState('');
-  const [priorityText, setPriorityText] = useState('NORMAL');
-  const [lotCode, setLotCode] = useState('');
-  const [observations, setObservations] = useState('');
-  const [barcodeValue, setBarcodeValue] = useState('');
-  
-  // Printing & Copies Settings
-  const [copiesCount, setCopiesCount] = useState<number>(1);
-  const [isVolumeSequential, setIsVolumeSequential] = useState(false);
-  const [barcodeType, setBarcodeType] = useState<'code128' | 'qr' | 'both'>('code128');
+  // Left Control Panel States (matching reference UI)
+  const [operatorName, setOperatorName] = useState<string>('OPERADOR 01');
+  const [labelDate, setLabelDate] = useState<string>(() => getTodayFormatted());
+  const [itemsText, setItemsText] = useState<string>('');
+
+  // Label Configuration States
+  const [showOperator, setShowOperator] = useState<boolean>(true);
+  const [showDate, setShowDate] = useState<boolean>(true);
+  const [showBarcode, setShowBarcode] = useState<boolean>(true);
+  const [itemFontSize, setItemFontSize] = useState<ItemFontSize>('MÉD');
+  const [paperFormat, setPaperFormat] = useState<LabelPreset>('100x30');
+
+  // Right Panel States
+  const [activeRightTab, setActiveRightTab] = useState<RightPanelTab>('labels');
   const [previewZoom, setPreviewZoom] = useState<number>(100);
+  const [isPrinting, setIsPrinting] = useState<boolean>(false);
+  const [printStatusMessage, setPrintStatusMessage] = useState<string | null>(null);
+  const [zplCopied, setZplCopied] = useState<boolean>(false);
 
-  // Helper to populate fields from OrderItem
-  const populateFromOrder = useCallback((ord: OrderItem) => {
-    const op = ord.orderId || ord.id || '';
-    const store = ord.store || 'Loja Principal';
-    const desc = ord.itemDescription || '';
+  // Database Tab States
+  const [dbSearch, setDbSearch] = useState<string>('');
+  const [dbStatusFilter, setDbStatusFilter] = useState<'all' | 'completed' | 'active' | 'pending'>('all');
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
 
-    setOpNumber(op);
-    setClientName(store);
-    setItemDesc(desc);
-    setQuantity(ord.quantity || 1);
-    setCopiesCount(ord.quantity || 1);
-    setIsVolumeSequential((ord.quantity || 1) > 1);
-    setUnit(ord.unit || 'UN');
-    setProductionDate(ord.productionDate || new Date().toLocaleDateString('pt-BR'));
-    setOperatorName(ord.assignedOperatorName || '');
-    setPriorityText(ord.priority || 'NORMAL');
-    
-    // Generate clean lot code: LOT-[DATE]-[OP]
-    const cleanOp = op.replace(/[^a-zA-Z0-9]/g, '');
-    const todayStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-    setLotCode(`LOT-${todayStr}-${cleanOp.slice(-4)}`);
-    
-    // Full barcode data: OP - Loja - Descrição da peça
-    const fullBarcode = [op, store, desc].filter(Boolean).join(' - ');
-    setBarcodeValue(fullBarcode);
-    setObservations(ord.pendingReason ? `Obs: ${ord.pendingReason}` : '');
+  const datePickerRef = useRef<HTMLInputElement>(null);
+
+  // Format an OrderItem into a batch line: "CODE - DESCRIPTION (QTY)"
+  const formatOrderToLine = useCallback((ord: OrderItem): string => {
+    const op = (ord.orderId || ord.id || '').replace(/#/g, '').trim().toUpperCase();
+    const store = (ord.store || '').trim().toUpperCase();
+    const codePart = [op, store].filter(Boolean).join('');
+    const descPart = (ord.itemDescription || 'PEÇA').trim().toUpperCase();
+    const qty = Math.max(1, Number(ord.quantity) || 1);
+    const prefix = codePart ? `${codePart} - ` : '';
+    return `${prefix}${descPart} (${qty})`;
   }, []);
 
-  // Sync when preselectedOrderId changes
+  // Sync if preselectedOrderId is provided when navigating to Labels tab
   useEffect(() => {
     if (!preselectedOrderId) return;
-    const timer = setTimeout(() => {
-      setSelectedOrderId(preselectedOrderId);
-      const found = orders.find((o) => o.id === preselectedOrderId);
-      if (found) {
-        populateFromOrder(found);
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [preselectedOrderId, orders, populateFromOrder]);
-
-  // Handle Order Selection from Dropdown
-  const handleSelectOrder = (orderId: string) => {
-    setSelectedOrderId(orderId);
-    if (!orderId) {
-      if (onClearPreselectedOrder) onClearPreselectedOrder();
-      return;
-    }
-    const found = orders.find((o) => o.id === orderId);
+    const found = orders.find((o) => o.id === preselectedOrderId);
     if (found) {
-      populateFromOrder(found);
+      const line = formatOrderToLine(found);
+      const timer = setTimeout(() => {
+        if (found.assignedOperatorName) {
+          setOperatorName(found.assignedOperatorName.toUpperCase());
+        }
+        if (found.productionDate && !found.productionDate.toLowerCase().includes('aguardando')) {
+          setLabelDate(found.productionDate);
+        }
+        setItemsText((prev) => {
+          const trimmed = prev.trim();
+          if (!trimmed) return line;
+          if (trimmed.split('\n').some((l) => l.trim() === line)) return prev;
+          return `${trimmed}\n${line}`;
+        });
+        setActiveRightTab('labels');
+        if (onClearPreselectedOrder) onClearPreselectedOrder();
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [preselectedOrderId, orders, formatOrderToLine, onClearPreselectedOrder]);
+
+  // Parse lines from textarea into structured items
+  const parsedItems = useMemo<ParsedLabelItem[]>(() => {
+    if (!itemsText.trim()) return [];
+    const lines = itemsText.split('\n');
+    const result: ParsedLabelItem[] = [];
+
+    lines.forEach((rawLine, idx) => {
+      const trimmed = rawLine.trim();
+      if (!trimmed) return;
+
+      let working = trimmed;
+      let qty = 1;
+
+      // Extract trailing "(N)" quantity if present
+      const qtyMatch = working.match(/\((\d+)\)\s*$/);
+      if (qtyMatch) {
+        qty = Math.min(500, Math.max(1, parseInt(qtyMatch[1], 10) || 1));
+        working = working.slice(0, qtyMatch.index).trim();
+      }
+
+      if (!working) return;
+
+      // Split on first "-" into 1st line (code/title) and 2nd line (description)
+      const sepIndex = working.indexOf('-');
+      let code = '';
+      let description = working;
+
+      if (sepIndex > 0) {
+        code = working.slice(0, sepIndex).trim();
+        description = working.slice(sepIndex + 1).trim();
+      }
+
+      result.push({
+        id: `lbl-item-${idx}`,
+        rawLine: trimmed,
+        code: code.toUpperCase(),
+        description: description.toUpperCase(),
+        quantity: qty,
+      });
+    });
+
+    return result;
+  }, [itemsText]);
+
+  // Expand items into physical 100x30mm label instances
+  const physicalLabels = useMemo<PhysicalLabelInstance[]>(() => {
+    const list: PhysicalLabelInstance[] = [];
+    parsedItems.forEach((item) => {
+      for (let i = 0; i < item.quantity; i++) {
+        list.push({
+          key: `${item.id}-copy-${i}`,
+          item,
+          copyIndex: i,
+          totalCopies: item.quantity,
+        });
+      }
+    });
+    return list;
+  }, [parsedItems]);
+
+  // Chunk parsed items for Agrupado (100x220mm) thermal sheets (up to 7 items per 220mm sheet)
+  const groupedSheets = useMemo<ParsedLabelItem[][]>(() => {
+    if (parsedItems.length === 0) return [];
+    const CHUNK_SIZE = 7;
+    const sheets: ParsedLabelItem[][] = [];
+    for (let i = 0; i < parsedItems.length; i += CHUNK_SIZE) {
+      sheets.push(parsedItems.slice(i, i + CHUNK_SIZE));
+    }
+    return sheets;
+  }, [parsedItems]);
+
+  const totalLabelsCount = physicalLabels.length;
+  const displayLabelsBadgeCount = paperFormat === '100x30' ? totalLabelsCount : groupedSheets.length;
+
+  // Quick Actions: Example & Clear
+  const handleInsertExample = () => {
+    setItemsText(
+      [
+        'R306909PRIMA - PORTA PALHETA 210X80 LADO ESQUERDO BRANCO (2)',
+        '31458RAGUEB - VITRO 4F S/B 100X120 S/G MODULAR BRANCO (1)',
+        '31502CENTRAL - LAMBRIL DUPLO 210X90 PRETO FOSCO (3)',
+      ].join('\n')
+    );
+  };
+
+  const handleClearAll = () => {
+    setItemsText('');
+  };
+
+  // ZPL II Code Generation for Zebra ZD220 (203 DPI: 8 dots/mm)
+  const generatedZplCode = useMemo<string>(() => {
+    if (parsedItems.length === 0) return '';
+
+    const opClean = sanitizeZplText(operatorName || 'OPERADOR 01');
+    const dateClean = sanitizeZplText(labelDate || getTodayFormatted());
+
+    if (paperFormat === '100x30') {
+      // 100mm = 800 dots, 30mm = 240 dots
+      return parsedItems
+        .map((item) => {
+          const codeClean = sanitizeZplText(item.code);
+          const descClean = sanitizeZplText(item.description);
+          const barcodeData = codeClean || descClean.slice(0, 24) || 'ZEBRA';
+
+          const descFont =
+            itemFontSize === 'PEQ'
+              ? '^A0N,20,20'
+              : itemFontSize === 'GRD'
+              ? '^A0N,30,28'
+              : '^A0N,25,24';
+
+          const lines: string[] = [
+            '^XA',
+            '^CI28',
+            '^PW800',
+            '^LL240',
+            '^LH0,0',
+          ];
+
+          if (showOperator || showDate) {
+            if (showOperator) {
+              lines.push(`^FO24,16^A0N,24,24^FDOP: ${opClean}^FS`);
+            }
+            if (showDate) {
+              lines.push(`^FO620,16^A0N,24,24^FD${dateClean}^FS`);
+            }
+            lines.push('^FO20,46^GB760,3,3^FS');
+          }
+
+          const contentTopY = showOperator || showDate ? 62 : 24;
+
+          if (showBarcode) {
+            lines.push(`^FO24,${contentTopY + 6}^BY2,2.5,95^BCN,95,Y,N,N^FD${barcodeData}^FS`);
+          }
+
+          const textStartX = showBarcode ? 345 : 24;
+          const textBlockWidth = showBarcode ? 430 : 750;
+
+          if (codeClean) {
+            lines.push(`^FO${textStartX},${contentTopY}^A0N,54,50^FD${codeClean}^FS`);
+            if (descClean) {
+              lines.push(
+                `^FO${textStartX},${contentTopY + 60}${descFont}^FB${textBlockWidth},3,4,L,0^FD${descClean}^FS`
+              );
+            }
+          } else {
+            lines.push(
+              `^FO${textStartX},${contentTopY + 8}${descFont}^FB${textBlockWidth},4,4,L,0^FD${descClean}^FS`
+            );
+          }
+
+          lines.push(`^PQ${item.quantity},0,1,Y`);
+          lines.push('^XZ');
+          return lines.join('\n');
+        })
+        .join('\n\n');
+    } else {
+      // Agrupado 100mm x 220mm (800 dots x 1760 dots)
+      return groupedSheets
+        .map((sheetItems, sheetIdx) => {
+          const lines: string[] = [
+            '^XA',
+            '^CI28',
+            '^PW800',
+            '^LL1760',
+            '^LH0,0',
+            `^FO24,24^A0N,34,34^FDLOTE AGRUPADO (${sheetIdx + 1}/${groupedSheets.length})^FS`,
+          ];
+
+          if (showOperator) {
+            lines.push(`^FO24,68^A0N,24,24^FDOPERADOR: ${opClean}^FS`);
+          }
+          if (showDate) {
+            lines.push(`^FO580,68^A0N,24,24^FDDATA: ${dateClean}^FS`);
+          }
+          lines.push('^FO20,104^GB760,4,4^FS');
+
+          let currY = 128;
+          sheetItems.forEach((item) => {
+            const codeClean = sanitizeZplText(item.code);
+            const descClean = sanitizeZplText(item.description);
+            const barcodeData = codeClean || descClean.slice(0, 20);
+
+            if (showBarcode) {
+              lines.push(`^FO24,${currY + 12}^BY2,2,70^BCN,70,Y,N,N^FD${barcodeData}^FS`);
+            }
+            const tx = showBarcode ? 310 : 24;
+            const tw = showBarcode ? 465 : 750;
+            lines.push(
+              `^FO${tx},${currY}^A0N,40,38^FD${codeClean ? `${codeClean}  ` : ''}[QTD: ${item.quantity}]^FS`
+            );
+            lines.push(`^FO${tx},${currY + 46}^A0N,24,22^FB${tw},2,4,L,0^FD${descClean}^FS`);
+            lines.push(`^FO20,${currY + 185}^GB760,2,2^FS`);
+            currY += 205;
+          });
+
+          lines.push('^PQ1,0,1,Y');
+          lines.push('^XZ');
+          return lines.join('\n');
+        })
+        .join('\n\n');
+    }
+  }, [parsedItems, groupedSheets, operatorName, labelDate, paperFormat, showOperator, showDate, showBarcode, itemFontSize]);
+
+  const handleCopyZpl = async () => {
+    if (!generatedZplCode) return;
+    try {
+      await navigator.clipboard.writeText(generatedZplCode);
+      setZplCopied(true);
+      setTimeout(() => setZplCopied(false), 2500);
+    } catch {
+      // Fallback
     }
   };
 
-  // Build standalone printable HTML document (for new tab printing or export)
+  const handleDownloadZpl = () => {
+    if (!generatedZplCode) return;
+    const blob = new Blob([generatedZplCode], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `etiquetas-zebra-zd220-${Date.now()}.zpl`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Database Tab filtering
+  const filteredDbOrders = useMemo(() => {
+    return orders.filter((ord) => {
+      const isCompleted = ord.executionStatus === 'concluido' || ord.progress === 100;
+      const isPendingDate =
+        !isCompleted &&
+        !ord.isClosedUncompleted &&
+        (ord.column === 'nao_planejado' || !ord.productionDate || ord.productionDate.toLowerCase().includes('aguardando'));
+
+      if (dbStatusFilter === 'completed' && !isCompleted) return false;
+      if (dbStatusFilter === 'pending' && !isPendingDate) return false;
+      if (dbStatusFilter === 'active' && (isCompleted || isPendingDate || ord.isClosedUncompleted)) return false;
+
+      if (dbSearch.trim()) {
+        return matchesMultiTermSearch(
+          [ord.orderId, ord.store, ord.itemDescription, ord.assignedOperatorName, ord.assignedOperatorCode],
+          dbSearch
+        );
+      }
+      return true;
+    });
+  }, [orders, dbSearch, dbStatusFilter]);
+
+  const handleAddOrderLine = (ord: OrderItem) => {
+    const line = formatOrderToLine(ord);
+    setItemsText((prev) => (prev.trim() ? `${prev.trim()}\n${line}` : line));
+    if (ord.assignedOperatorName && operatorName === 'OPERADOR 01') {
+      setOperatorName(ord.assignedOperatorName.toUpperCase());
+    }
+  };
+
+  const handleAddAllFilteredOrders = () => {
+    if (filteredDbOrders.length === 0) return;
+    const lines = filteredDbOrders.slice(0, 50).map(formatOrderToLine);
+    setItemsText((prev) => {
+      const existing = prev.trim();
+      return existing ? `${existing}\n${lines.join('\n')}` : lines.join('\n');
+    });
+    setActiveRightTab('labels');
+  };
+
+  // Standalone HTML generator for iframe fallback new-tab printing
   const generatePrintHtml = () => {
     const widthMm = '100mm';
-    const heightMm = selectedPreset === '100x30' ? '30mm' : selectedPreset === '100x50' ? '50mm' : '150mm';
-    const printerTitle = selectedPrinter || DEFAULT_PRINTER;
-    const cleanOp = (opNumber || '').replace(/[^a-zA-Z0-9]/g, '');
-
+    const heightMm = paperFormat === '100x30' ? '30mm' : '220mm';
     const printContent = document.getElementById('zebra-print-source');
     const contentHtml = printContent ? printContent.innerHTML : '';
 
@@ -148,7 +432,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 <html>
   <head>
     <meta charset="utf-8">
-    <title>${printerTitle} - ${cleanOp ? `OP #${cleanOp}` : 'Etiqueta'} (${copiesCount} etiquetas)</title>
+    <title>${DEFAULT_PRINTER} - Impressão de Etiquetas (${displayLabelsBadgeCount})</title>
     <style>
       @page {
         size: ${widthMm} ${heightMm} !important;
@@ -187,13 +471,13 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
       }
       body {
         margin: 0;
-        padding: 10px;
-        background: #f8fafc;
+        padding: 12px;
+        background: #f1f5f9;
         font-family: Arial, sans-serif;
       }
       .zebra-label-print-page {
         box-sizing: border-box;
-        margin: 0 auto 10px auto;
+        margin: 0 auto 12px auto;
         background: white;
         width: ${widthMm};
         height: ${heightMm};
@@ -205,15 +489,15 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
     </style>
   </head>
   <body>
-    <div class="no-print-element" style="text-align: center; margin-bottom: 12px; font-family: sans-serif; background: #eff6ff; padding: 12px 16px; border-radius: 12px; border: 1.5px solid #bfdbfe; max-width: 620px; margin-left: auto; margin-right: auto;">
+    <div class="no-print-element" style="text-align: center; margin-bottom: 14px; font-family: sans-serif; background: #eff6ff; padding: 12px 16px; border-radius: 12px; border: 1.5px solid #bfdbfe; max-width: 620px; margin-left: auto; margin-right: auto;">
       <div style="font-size: 13px; font-weight: 800; color: #1e3a8a; margin-bottom: 4px;">
-        🖨️ Impressora: <u>${printerTitle}</u>
+        Impressora Padrão: <u>${DEFAULT_PRINTER}</u>
       </div>
       <div style="font-size: 11px; color: #1e40af; margin-bottom: 8px;">
-        Formato: <strong>${widthMm} x ${heightMm}</strong> | Conteúdo centralizado automaticamente na Zebra ZD220
+        Formato: <strong>${widthMm} x ${heightMm}</strong> | Margens zeradas e centralização automática
       </div>
-      <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 10px 22px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.12);">
-        🖨️ CONFIRMAR IMPRESSÃO NA ${printerTitle} (${copiesCount} ${copiesCount === 1 ? 'etiqueta' : 'etiquetas'})
+      <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 9px 20px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 13px;">
+        CONFIRMAR IMPRESSÃO (${displayLabelsBadgeCount})
       </button>
     </div>
     ${contentHtml}
@@ -228,7 +512,6 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
 </html>`;
   };
 
-  // Open standalone print page in new tab (fail-safe for browser iframes/popups)
   const handleOpenInNewTab = () => {
     try {
       const html = generatePrintHtml();
@@ -238,7 +521,6 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
         newWin.document.write(html);
         newWin.document.close();
         newWin.focus();
-        setPrintStatusMessage('Página de etiquetas aberta em nova aba com diálogo de impressão pronto!');
       } else {
         const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
         const blobUrl = URL.createObjectURL(blob);
@@ -252,24 +534,23 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
           if (document.body.contains(a)) document.body.removeChild(a);
           URL.revokeObjectURL(blobUrl);
         }, 2000);
-        setPrintStatusMessage('Página aberta em nova aba! Confirme a impressão na janela.');
       }
-      setTimeout(() => setPrintStatusMessage(null), 5000);
     } catch (err) {
       console.error('Failed to open print tab:', err);
     }
   };
 
-  // Dedicated Direct Print Logic for Zebra ZD220 using window.print()
+  // Dedicated Direct Print Logic for Zebra ZD220 using window.print() + @media print
   const handlePrint = () => {
+    if (totalLabelsCount === 0) return;
+
     try {
       setIsPrinting(true);
-      setPrintStatusMessage(`Disparando impressão direta para ${selectedPrinter}...`);
+      setPrintStatusMessage(`Enviando para ${DEFAULT_PRINTER}...`);
 
       const widthMm = '100mm';
-      const heightMm = selectedPreset === '100x30' ? '30mm' : selectedPreset === '100x50' ? '50mm' : '150mm';
+      const heightMm = paperFormat === '100x30' ? '30mm' : '220mm';
 
-      // 1. Prepare dedicated in-window print portal directly attached to body
       let printPortal = document.getElementById('zebra-direct-print-portal');
       if (!printPortal) {
         printPortal = document.createElement('div');
@@ -282,7 +563,6 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
         printPortal.innerHTML = sourceContent.innerHTML;
       }
 
-      // 2. Inject dedicated @media print CSS to ignore UI elements and center content on Zebra ZD220
       let styleTag = document.getElementById('zebra-direct-print-style') as HTMLStyleElement;
       if (!styleTag) {
         styleTag = document.createElement('style');
@@ -305,7 +585,6 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          /* Ignore all application UI elements during print */
           body > *:not(#zebra-direct-print-portal) {
             display: none !important;
           }
@@ -340,7 +619,6 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
         }
       `;
 
-      // 3. Cleanup handler when print dialog closes
       const cleanup = () => {
         if (printPortal && printPortal.parentNode) {
           printPortal.parentNode.removeChild(printPortal);
@@ -355,11 +633,8 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
       window.addEventListener('afterprint', cleanup, { once: true });
       setTimeout(cleanup, 4000);
 
-      // 4. Trigger direct window.print()
       window.print();
 
-      // In sandboxed iframes (e.g. AI Studio preview), window.print() is often suppressed without user notice.
-      // Automatically invoke new tab so the user is never left hanging.
       const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
       if (isInIframe) {
         setTimeout(() => {
@@ -373,269 +648,310 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
     }
   };
 
-  // Generate array of label items to render for printing (based on copiesCount and volume sequential)
-  const renderLabelContent = (copyIndex: number) => {
-    const volText = isVolumeSequential ? `VOL ${copyIndex + 1}/${copiesCount}` : '';
-    const headerTitle = companyHeader || (clientName ? `CLI: ${clientName}` : '');
-    const showClientInBody = Boolean(companyHeader && clientName);
+  // Compute description font size in px based on PEQ / MÉD / GRD and character length
+  const getDescriptionFontPx = (descLength: number): string => {
+    if (itemFontSize === 'PEQ') {
+      return descLength > 55 ? '7.5px' : '8.5px';
+    }
+    if (itemFontSize === 'GRD') {
+      return descLength > 55 ? '10.5px' : descLength > 35 ? '11.5px' : '13px';
+    }
+    // MÉD (default)
+    return descLength > 55 ? '9px' : descLength > 35 ? '10px' : '11px';
+  };
 
-    if (selectedPreset === '100x30') {
-      // 100mm x 30mm (Zebra Standard 10x3 cm) - Replicated exact attachment visual model
-      const formatPtBrDate = (dateStr?: string) => {
-        if (!dateStr) return new Date().toLocaleDateString('pt-BR');
-        const cleanStr = dateStr.trim();
-        if (cleanStr.includes('-')) {
-          const parts = cleanStr.split('-');
-          if (parts.length === 3 && parts[0].length === 4) {
-            return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
-          }
-        }
-        return cleanStr;
-      };
+  // Render a single 100x30mm label
+  const renderStandardLabel = (instance: PhysicalLabelInstance) => {
+    const { item, copyIndex, totalCopies } = instance;
+    const barcodeText = item.code || item.description.slice(0, 22) || 'ZEBRA';
+    const hasHeader = showOperator || showDate;
 
-      const formattedDate = formatPtBrDate(productionDate);
-      const cleanOpNum = (opNumber || '').replace(/#/g, '').trim();
-      const cleanStore = (clientName || '').trim().toUpperCase();
-      const combinedOpStore = (cleanOpNum || cleanStore) ? `${cleanOpNum}${cleanStore}` : 'BC3026';
-      const operatorDisplayName = (operatorName || '').trim().toUpperCase();
-      const barcodeText = barcodeValue || [cleanOpNum, cleanStore, itemDesc].filter(Boolean).join(' - ') || (opNumber ? `${opNumber}-PORTA` : 'BC3026-PORTA');
+    return (
+      <div
+        className="w-[100mm] h-[30mm] bg-white border border-black flex flex-col justify-between text-black font-sans box-border overflow-hidden select-none relative"
+        style={{
+          width: '100mm',
+          height: '30mm',
+          minWidth: '100mm',
+          minHeight: '30mm',
+          boxSizing: 'border-box',
+          border: '1.5px solid #000000',
+          padding: '5px 10px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          backgroundColor: '#ffffff',
+          color: '#000000',
+          fontFamily: 'Arial, sans-serif',
+        }}
+      >
+        {hasHeader && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1.5px solid #000000',
+              paddingBottom: '2px',
+              flexShrink: 0,
+              minHeight: '15px',
+            }}
+          >
+            <div style={{ fontSize: '11px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              {showOperator ? `OP: ${(operatorName || 'OPERADOR 01').toUpperCase()}` : ''}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontWeight: 900 }}>
+              {totalCopies > 1 && (
+                <span style={{ fontSize: '10px', fontFamily: 'monospace' }}>
+                  VOL {copyIndex + 1}/{totalCopies}
+                </span>
+              )}
+              {showDate && <span>{labelDate}</span>}
+            </div>
+          </div>
+        )}
 
-      return (
-        <div 
-          className="w-[100mm] h-[30mm] bg-white border border-black p-2 flex flex-col justify-between text-black font-sans box-border overflow-hidden select-none relative"
-          style={{ 
-            width: '100mm', 
-            height: '30mm', 
-            minWidth: '100mm', 
-            minHeight: '30mm', 
-            boxSizing: 'border-box', 
-            border: '1.5px solid black', 
-            padding: '6px 10px 6px 10px', 
-            display: 'flex', 
-            flexDirection: 'column', 
-            justifyContent: 'space-between', 
-            backgroundColor: '#ffffff', 
-            color: '#000000',
-            fontFamily: 'Arial, sans-serif'
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            flex: '1 1 0%',
+            minHeight: 0,
+            overflow: 'hidden',
+            paddingTop: hasHeader ? '2px' : '0px',
           }}
         >
-          {/* Header Row: OP: [OPERATOR] ... [DATE] */}
-          <div 
-            className="flex items-center justify-between border-b border-black pb-1 shrink-0"
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              borderBottom: '2px solid black', 
-              paddingBottom: '3px', 
-              flexShrink: 0 
-            }}
-          >
-            <div className="text-[13px] font-black uppercase tracking-wide" style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-              OP: <span className="font-extrabold">{operatorDisplayName}</span>
-            </div>
-            <div className="text-[13px] font-black uppercase tracking-wide" style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-              {formattedDate}
-            </div>
-          </div>
-
-          {/* Body Row: Left Barcode + Right Big Item Code & Description */}
-          <div 
-            className="flex items-center gap-3 my-auto flex-1 min-h-0 overflow-hidden pt-1" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px', 
-              flex: '1 1 0%', 
-              minHeight: 0, 
-              overflow: 'hidden',
-              paddingTop: '2px'
-            }}
-          >
-            {/* Left Column: Barcode with text beneath */}
-            <div 
-              className="w-[42mm] flex flex-col items-center justify-center shrink-0" 
-              style={{ width: '42mm', minWidth: '42mm', maxWidth: '42mm', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          {showBarcode && (
+            <div
+              style={{
+                width: '38mm',
+                minWidth: '38mm',
+                maxWidth: '38mm',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
             >
-              {renderBarcodeSVG(barcodeText, { 
-                height: 48, 
-                className: 'h-[14mm] w-[40mm]', 
-                svgStyle: { height: '14mm', width: '40mm', maxHeight: '100%', maxWidth: '100%' },
-                textClass: 'text-[9.5px] font-mono tracking-tight font-black text-black mt-0.5 leading-none uppercase' 
+              {renderBarcodeSVG(barcodeText, {
+                height: 44,
+                className: 'h-[13mm] w-[36mm]',
+                svgStyle: { height: '13mm', width: '36mm', maxHeight: '100%', maxWidth: '100%' },
+                textClass: 'text-[9px] font-mono tracking-tight font-black text-black mt-0.5 leading-none uppercase',
               })}
-            </div>
-
-            {/* Right Column: Prominent Code & Multi-line Item Description */}
-            <div 
-              className="flex-1 min-w-0 flex flex-col justify-center h-full pl-1" 
-              style={{ flex: '1 1 0%', minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}
-            >
-              {/* Product Main Code (OP+Store joined, e.g., 31458RAGUEB or BC3026) */}
-              <div 
-                className="text-[22px] font-black leading-none text-black uppercase tracking-tight" 
-                style={{ fontSize: '22px', fontWeight: 900, lineHeight: 1.0, color: '#000000', textTransform: 'uppercase', letterSpacing: '-0.02em', marginBottom: '2px' }}
-              >
-                {combinedOpStore}
-              </div>
-              
-              {/* Detailed Item Specification with auto line breaks */}
-              <div 
-                className="text-black font-black uppercase break-words whitespace-normal leading-tight" 
-                style={{ 
-                  fontSize: (itemDesc || '').length > 60 ? '8.5px' : (itemDesc || '').length > 35 ? '9.5px' : '11px', 
-                  fontWeight: 900, 
-                  lineHeight: 1.08, 
-                  color: '#000000', 
-                  textTransform: 'uppercase', 
-                  wordBreak: 'break-word',
-                  whiteSpace: 'normal',
-                  letterSpacing: '0.01em'
-                }}
-              >
-                {itemDesc || 'VITRO 4F S/B 100X120 S/G MODULAR BRANCO'}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (selectedPreset === '100x50') {
-      // 100mm x 50mm - Large legible typography
-      return (
-        <div 
-          className="w-[100mm] h-[50mm] bg-white border-2 border-black p-2 flex flex-col justify-between text-black font-sans box-border overflow-hidden select-none"
-          style={{ width: '100mm', height: '50mm', minWidth: '100mm', minHeight: '50mm', boxSizing: 'border-box', border: '2px solid black', padding: '8px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', backgroundColor: '#ffffff', color: '#000000' }}
-        >
-          <div className="flex items-center justify-between border-b-2 border-black pb-1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '2px solid black', paddingBottom: '4px' }}>
-            {companyHeader ? (
-              <span className="text-[12px] font-black uppercase" style={{ fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' }}>{companyHeader}</span>
-            ) : null}
-            <span className={`text-[13px] font-black bg-black text-white px-2.5 py-0.5 rounded-xs ${companyHeader ? '' : 'ml-auto'}`} style={{ fontSize: '13px', fontWeight: 900, backgroundColor: 'black', color: 'white', padding: '2px 8px', textTransform: 'uppercase' }}>
-              OP: {opNumber || '0000'}
-            </span>
-          </div>
-
-          <div className="space-y-1 my-1" style={{ marginTop: '4px', marginBottom: '4px' }}>
-            <div className="text-[12px] font-bold break-words" style={{ fontSize: '12px', fontWeight: 700 }}>
-              CLIENTE/LOJA: <strong className="text-[14px] font-black uppercase" style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase' }}>{clientName || 'N/A'}</strong>
-            </div>
-            <div className="text-[18px] font-black uppercase leading-tight break-words whitespace-normal font-sans" style={{ fontSize: '18px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.15 }}>
-              {itemDesc || 'PRODUTO'}
-            </div>
-            <div className="grid grid-cols-3 gap-1 text-[11px] font-bold bg-gray-100 p-1 border-2 border-black" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: '#f3f4f6', padding: '4px', border: '2px solid black' }}>
-              <div>QTD: <strong className="text-[13px] font-black" style={{ fontSize: '13px', fontWeight: 900 }}>{quantity} {unit}</strong></div>
-              <div>DATA: <strong className="font-black" style={{ fontWeight: 900 }}>{productionDate}</strong></div>
-              <div>PRIORIDADE: <strong className="font-black" style={{ fontWeight: 900 }}>{priorityText}</strong></div>
-            </div>
-          </div>
-
-          {observations && (
-            <div className="text-[11px] font-bold border-t border-dashed border-black pt-0.5" style={{ fontSize: '11px', fontWeight: 700, borderTop: '1px dashed black', paddingTop: '2px' }}>
-              OBS: {observations}
             </div>
           )}
 
-          <div className="flex items-center justify-between border-t-2 border-black pt-1" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '2px solid black', paddingTop: '4px' }}>
-            <div className="text-[11px] font-mono font-bold" style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 700 }}>
-              <div>LOTE: <strong>{lotCode || 'N/A'}</strong></div>
-              <div>OP: <strong>{operatorName || 'PCP'}</strong></div>
-            </div>
-            <div style={{ width: '32mm', minWidth: '32mm' }}>
-              {renderBarcodeSVG(barcodeValue || [opNumber, clientName, itemDesc].filter(Boolean).join(' - ') || 'ZEBRA', { 
-                height: 48, 
-                className: 'h-11 w-full max-w-[240px]', 
-                svgStyle: { height: '11mm', width: '30mm', maxHeight: '100%', maxWidth: '100%' },
-                textClass: 'text-[9.5px] font-mono font-black' 
-              })}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (selectedPreset === '100x150') {
-      // 100mm x 150mm (Caixas / Volume grandes)
-      return (
-        <div 
-          className="w-[100mm] h-[150mm] bg-white border-4 border-black p-3.5 flex flex-col justify-between text-black font-sans box-border overflow-hidden select-none"
-          style={{ width: '100mm', height: '150mm', minWidth: '100mm', minHeight: '150mm', boxSizing: 'border-box', border: '4px solid black', padding: '14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', backgroundColor: '#ffffff', color: '#000000' }}
-        >
-          <div className="border-b-4 border-black pb-2 text-center" style={{ borderBottom: '4px solid black', paddingBottom: '8px', textAlign: 'center' }}>
-            {companyHeader ? (
-              <div className="text-[14px] font-black uppercase mb-1" style={{ fontSize: '14px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '4px' }}>{companyHeader}</div>
-            ) : null}
-            <div className="text-[22px] font-black bg-black text-white py-1.5 uppercase" style={{ fontSize: '22px', fontWeight: 900, backgroundColor: 'black', color: 'white', padding: '6px 0', textTransform: 'uppercase' }}>
-              ORDEM DE PRODUÇÃO: {opNumber || 'OP-0000'}
-            </div>
-          </div>
-
-          <div className="space-y-3 my-2 text-left" style={{ marginTop: '8px', marginBottom: '8px' }}>
-            <div className="border-b-2 border-black pb-1" style={{ borderBottom: '2px solid black', paddingBottom: '4px' }}>
-              <span className="text-[11px] font-extrabold uppercase text-gray-700" style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#374151' }}>CLIENTE / DESTINATÁRIO</span>
-              <div className="text-[18px] font-black uppercase" style={{ fontSize: '18px', fontWeight: 900, textTransform: 'uppercase' }}>{clientName || 'N/A'}</div>
-            </div>
-
-            <div className="border-b-2 border-black pb-1" style={{ borderBottom: '2px solid black', paddingBottom: '4px' }}>
-              <span className="text-[11px] font-extrabold uppercase text-gray-700" style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: '#374151' }}>DESCRIÇÃO DO ITEM</span>
-              <div className="text-[25px] font-black uppercase leading-snug" style={{ fontSize: '25px', fontWeight: 900, textTransform: 'uppercase', lineHeight: 1.15 }}>{itemDesc || 'N/A'}</div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 bg-gray-100 p-2.5 border-2 border-black" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px', backgroundColor: '#f3f4f6', padding: '10px', border: '2px solid black' }}>
-              <div>
-                <span className="text-[10px] font-extrabold text-gray-700 uppercase" style={{ fontSize: '10px', fontWeight: 800, color: '#374151', textTransform: 'uppercase' }}>QUANTIDADE TOTAL</span>
-                <div className="text-[22px] font-black" style={{ fontSize: '22px', fontWeight: 900 }}>{quantity} {unit}</div>
+          <div
+            style={{
+              flex: '1 1 0%',
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              height: '100%',
+            }}
+          >
+            {item.code && (
+              <div
+                style={{
+                  fontSize:
+                    item.code.length <= 10
+                      ? itemFontSize === 'PEQ'
+                        ? '22px'
+                        : itemFontSize === 'GRD'
+                        ? '28px'
+                        : '26px'
+                      : item.code.length <= 15
+                      ? itemFontSize === 'PEQ'
+                        ? '19px'
+                        : itemFontSize === 'GRD'
+                        ? '24px'
+                        : '22px'
+                      : itemFontSize === 'PEQ'
+                      ? '16px'
+                      : itemFontSize === 'GRD'
+                      ? '20px'
+                      : '18px',
+                  fontWeight: 900,
+                  lineHeight: 0.98,
+                  color: '#000000',
+                  textTransform: 'uppercase',
+                  letterSpacing: '-0.03em',
+                  marginBottom: '4px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {item.code}
               </div>
-              <div>
-                <span className="text-[10px] font-extrabold text-gray-700 uppercase" style={{ fontSize: '10px', fontWeight: 800, color: '#374151', textTransform: 'uppercase' }}>DATA FABRICAÇÃO</span>
-                <div className="text-[16px] font-black" style={{ fontSize: '16px', fontWeight: 900 }}>{productionDate}</div>
-              </div>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 gap-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
-              <div>
-                <span className="text-[10px] font-extrabold text-gray-700 uppercase" style={{ fontSize: '10px', fontWeight: 800, color: '#374151', textTransform: 'uppercase' }}>RESPONSÁVEL / OP</span>
-                <div className="text-[14px] font-black" style={{ fontSize: '14px', fontWeight: 900 }}>{operatorName || 'N/A'}</div>
+            {item.description && (
+              <div
+                style={{
+                  fontSize: getDescriptionFontPx(item.description.length),
+                  fontWeight: 700,
+                  lineHeight: 1.12,
+                  color: '#000000',
+                  textTransform: 'uppercase',
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
+                  letterSpacing: '0.01em',
+                }}
+              >
+                {item.description}
               </div>
-              <div>
-                <span className="text-[10px] font-extrabold text-gray-700 uppercase" style={{ fontSize: '10px', fontWeight: 800, color: '#374151', textTransform: 'uppercase' }}>VOLUME</span>
-                <div className="text-[16px] font-black" style={{ fontSize: '16px', fontWeight: 900 }}>{volText || `VOL 1/1`}</div>
-              </div>
-            </div>
+            )}
 
-            {observations && (
-              <div className="border-2 border-black p-2 text-[12px] font-bold" style={{ border: '2px solid black', padding: '8px', fontSize: '12px', fontWeight: 700 }}>
-                <strong>OBSERVAÇÕES:</strong> {observations}
+            {!hasHeader && totalCopies > 1 && (
+              <div style={{ fontSize: '9px', fontWeight: 900, fontFamily: 'monospace', marginTop: '2px' }}>
+                VOL {copyIndex + 1}/{totalCopies}
               </div>
             )}
           </div>
-
-          <div className="border-t-4 border-black pt-3 flex flex-col items-center" style={{ borderTop: '4px solid black', paddingTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            {renderBarcodeSVG(barcodeValue || [opNumber, clientName, itemDesc].filter(Boolean).join(' - ') || 'ZEBRA100', { 
-              height: 60, 
-              className: 'h-16 w-full max-w-[280px]', 
-              svgStyle: { height: '16mm', width: '70mm', maxHeight: '100%', maxWidth: '100%' },
-              textClass: 'text-[11px] font-mono font-black mt-1' 
-            })}
-            <span className="text-[10px] font-mono mt-1 font-black" style={{ fontSize: '10px', fontFamily: 'monospace', fontWeight: 900, marginTop: '4px' }}>SISTEMA TRINDADE PCP - IMPRESSÃO ZEBRA ZD220</span>
-          </div>
         </div>
-      );
-    }
+      </div>
+    );
+  };
 
-    // Default Fallback
-    return null;
+  // Render an Agrupado (100x220mm) sheet
+  const renderGroupedSheet = (sheetItems: ParsedLabelItem[], sheetIdx: number, totalSheets: number) => {
+    return (
+      <div
+        className="w-[100mm] h-[220mm] bg-white border border-black flex flex-col text-black font-sans box-border overflow-hidden select-none"
+        style={{
+          width: '100mm',
+          height: '220mm',
+          minWidth: '100mm',
+          minHeight: '220mm',
+          boxSizing: 'border-box',
+          border: '2px solid #000000',
+          padding: '8px 10px',
+          display: 'flex',
+          flexDirection: 'column',
+          backgroundColor: '#ffffff',
+          color: '#000000',
+          fontFamily: 'Arial, sans-serif',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '2.5px solid #000000',
+            paddingBottom: '5px',
+            marginBottom: '6px',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 900, textTransform: 'uppercase' }}>
+              LOTE DE PRODUÇÃO ({sheetIdx + 1}/{totalSheets})
+            </div>
+            {showOperator && (
+              <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', marginTop: '1px' }}>
+                OP: {(operatorName || 'OPERADOR 01').toUpperCase()}
+              </div>
+            )}
+          </div>
+          {showDate && (
+            <div style={{ fontSize: '12px', fontWeight: 900 }}>
+              {labelDate}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 0%', overflow: 'hidden' }}>
+          {sheetItems.map((item) => {
+            const barcodeText = item.code || item.description.slice(0, 20) || 'ZEBRA';
+            return (
+              <div
+                key={item.id}
+                style={{
+                  borderBottom: '1px dashed #000000',
+                  paddingBottom: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                {showBarcode && (
+                  <div style={{ width: '32mm', minWidth: '32mm', flexShrink: 0 }}>
+                    {renderBarcodeSVG(barcodeText, {
+                      height: 36,
+                      className: 'h-[10mm] w-[30mm]',
+                      svgStyle: { height: '10mm', width: '30mm' },
+                      textClass: 'text-[8px] font-mono font-black text-black mt-0.5 leading-none uppercase',
+                    })}
+                  </div>
+                )}
+                <div style={{ flex: '1 1 0%', minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px', marginBottom: '3px' }}>
+                    <span style={{ fontSize: '18px', fontWeight: 900, lineHeight: 1.0, letterSpacing: '-0.02em', textTransform: 'uppercase' }}>
+                      {item.code || 'ITEM'}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 900,
+                        backgroundColor: '#000000',
+                        color: '#ffffff',
+                        padding: '1px 5px',
+                      }}
+                    >
+                      QTD: {item.quantity}
+                    </span>
+                  </div>
+                  {item.description && (
+                    <div
+                      style={{
+                        fontSize: getDescriptionFontPx(item.description.length),
+                        fontWeight: 700,
+                        lineHeight: 1.15,
+                        textTransform: 'uppercase',
+                        marginTop: '2px',
+                      }}
+                    >
+                      {item.description}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            borderTop: '2px solid #000000',
+            paddingTop: '4px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '9px',
+            fontWeight: 900,
+            fontFamily: 'monospace',
+          }}
+        >
+          <span>ZEBRA ZD220 (100x220MM)</span>
+          <span>ITENS NA FOLHA: {sheetItems.length}</span>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="p-4 sm:p-6 lg:p-8 w-full max-w-[1440px] mx-auto animate-fadeIn">
       {/* Dedicated Zebra ZD220 Thermal Print Style (Ignores UI elements, auto-centers labels) */}
       <style
         dangerouslySetInnerHTML={{
           __html: `
             @media print {
               @page {
-                size: ${selectedPreset === '100x30' ? '100mm 30mm' : selectedPreset === '100x50' ? '100mm 50mm' : '100mm 150mm'} !important;
+                size: ${paperFormat === '100x30' ? '100mm 30mm' : '100mm 220mm'} !important;
                 margin: 0 !important;
               }
               html, body {
@@ -647,7 +963,6 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
               }
-              /* Ignore all UI elements */
               body > *:not(#zebra-direct-print-portal) {
                 display: none !important;
               }
@@ -670,7 +985,7 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
                 break-after: page !important;
                 page-break-inside: avoid !important;
                 width: 100mm !important;
-                height: ${selectedPreset === '100x30' ? '30mm' : selectedPreset === '100x50' ? '50mm' : '150mm'} !important;
+                height: ${paperFormat === '100x30' ? '30mm' : '220mm'} !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: center !important;
@@ -684,373 +999,563 @@ export const LabelGenerator: React.FC<LabelGeneratorProps> = ({
         }}
       />
 
-      {/* Header Banner */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-xs">
-            <span className="material-symbols-outlined text-[28px]">qr_code_2</span>
-          </div>
-          <div>
+      {/* Main 2-Column Workspace (Exact Match to Reference Design) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start no-print">
+        {/* LEFT COLUMN: PAINEL DE CONTROLE */}
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-5">
+          {/* Card Header */}
+          <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                Gerador de Etiquetas Zebra ZD220
+              <Layers className="w-4 h-4 text-slate-400" />
+              <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
+                PAINEL DE CONTROLE
               </h2>
-              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-full uppercase tracking-wider">
-                Térmica Direta
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleInsertExample}
+                className="px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/70 text-indigo-600 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                title="Preencher com exemplo de lote"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Exemplo</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="px-2.5 py-1 rounded-lg border border-rose-200 bg-rose-50/50 hover:bg-rose-100/70 text-rose-600 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                title="Limpar lista de peças"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Limpar</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Row 1: OPERADOR & DATA */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                <User className="w-3.5 h-3.5 text-slate-400" />
+                <span>OPERADOR</span>
+              </label>
+              <input
+                type="text"
+                list="zebra-operators-datalist"
+                value={operatorName}
+                onChange={(e) => setOperatorName(e.target.value)}
+                placeholder="OPERADOR 01"
+                className="w-full px-3.5 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:bg-white transition-all"
+              />
+              {operators.length > 0 && (
+                <datalist id="zebra-operators-datalist">
+                  {operators.map((op) => (
+                    <option key={op.id} value={op.name.toUpperCase()} />
+                  ))}
+                </datalist>
+              )}
+            </div>
+
+            <div>
+              <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>DATA</span>
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={labelDate}
+                  onChange={(e) => setLabelDate(e.target.value)}
+                  placeholder="DD/MM/AAAA"
+                  className="w-full pl-3.5 pr-9 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:bg-white transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => datePickerRef.current?.showPicker?.()}
+                  className="absolute right-2.5 text-slate-500 hover:text-slate-800 p-1 cursor-pointer"
+                  title="Selecionar data no calendário"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  ref={datePickerRef}
+                  type="date"
+                  value={dmyToIso(labelDate)}
+                  onChange={(e) => {
+                    const formatted = isoToDmy(e.target.value);
+                    if (formatted) setLabelDate(formatted);
+                  }}
+                  className="sr-only"
+                  tabIndex={-1}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: LISTA DE PEÇAS (LOTE) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
+                  LISTA DE PEÇAS (LOTE)
+                </span>
+              </div>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors ${
+                  displayLabelsBadgeCount > 0
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-slate-100 text-slate-500 border-slate-200/80'
+                }`}
+              >
+                {displayLabelsBadgeCount} {displayLabelsBadgeCount === 1 ? 'Etiqueta' : 'Etiquetas'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Geração de etiquetas de produção com código de barras Code128 em lote para impressoras térmicas Zebra.
+
+            <p className="text-[10.5px] text-slate-400 leading-relaxed">
+              INSIRA UM PRODUTO POR LINHA. EX: R306909PRIMA - PORTA PALHETA 210X80 LADO ESQUERDO BRANCO (2). Onde o número em parênteses refere-se a quantidade de etiquetas.
             </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsBatchModalOpen(true)}
-            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-sm text-xs transition-all flex items-center gap-2 cursor-pointer border border-slate-700"
-          >
-            <span className="material-symbols-outlined text-[18px]">qr_code_2</span>
-            <span>Imprimir Peças Concluídas em Lote</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={isPrinting}
-            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-75 text-white font-bold rounded-xl shadow-sm text-xs transition-all flex items-center gap-2 cursor-pointer"
-          >
-            {isPrinting ? (
-              <>
-                <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-                <span>Enviando...</span>
-              </>
-            ) : (
-              <>
-                <span className="material-symbols-outlined text-[18px]">print</span>
-                <span>Imprimir {copiesCount} {copiesCount === 1 ? 'Etiqueta' : 'Etiquetas'}</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Main Grid: Left Controls & Right Visual Preview */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 no-print">
-        {/* Left Form Controls (7 Cols) */}
-        <div className="lg:col-span-7 space-y-5">
-          {/* Preset & PCP Order Selector Card */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <span className="material-symbols-outlined text-blue-600 text-[20px]">tune</span>
-              <span>1. Configuração da Impressora & Dados do PCP</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Preset Selector */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Tamanho / Formato da Etiqueta:
-                </label>
-                <select
-                  value={selectedPreset}
-                  onChange={(e) => setSelectedPreset(e.target.value as LabelPreset)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="100x30">100mm x 30mm (10x3 cm) - Zebra Padrão</option>
-                  <option value="100x50">100mm x 50mm (10x5 cm) - Médio com Obs</option>
-                  <option value="100x150">100mm x 150mm (10x15 cm) - Caixa / Volume</option>
-                </select>
-              </div>
-
-              {/* Import from PCP Order */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Carregar de um Pedido / OP do PCP:
-                </label>
-                <select
-                  value={selectedOrderId}
-                  onChange={(e) => handleSelectOrder(e.target.value)}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 bg-slate-50 focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Seleção Manual / Personalizada --</option>
-                  {orders.map((ord) => (
-                    <option key={ord.id} value={ord.id}>
-                      OP: {ord.orderId || ord.id} - {ord.store} ({ord.itemDescription.substring(0, 25)})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <textarea
+              value={itemsText}
+              onChange={(e) => setItemsText(e.target.value)}
+              placeholder="INSIRA UM PRODUTO POR LINHA, EX: R306909PRIMA - PORTA PALHETA 210X80 LADO ESQUERDO BRANCO (2)"
+              className="w-full min-h-[210px] p-3.5 bg-white border border-slate-200 rounded-xl font-mono text-xs text-slate-800 placeholder:text-slate-400/90 leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 resize-y uppercase"
+            />
           </div>
 
-          {/* Label Fields Customization Card */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <span className="material-symbols-outlined text-blue-600 text-[20px]">edit_note</span>
-              <span>2. Campos da Etiqueta</span>
+          {/* Row 3: CONFIGURAÇÕES DA ETIQUETA */}
+          <div className="border-t border-slate-100 pt-4 space-y-3.5">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+              CONFIGURAÇÕES DA ETIQUETA
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Cabeçalho (Opcional):</label>
-                <input
-                  type="text"
-                  value={companyHeader}
-                  onChange={(e) => setCompanyHeader(e.target.value)}
-                  placeholder="Deixe em branco para ocultar"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Número da OP / Pedido:</label>
-                <input
-                  type="text"
-                  value={opNumber}
-                  onChange={(e) => {
-                    setOpNumber(e.target.value);
-                    if (!barcodeValue) setBarcodeValue(e.target.value);
-                  }}
-                  placeholder="Ex: OP-1045"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Cliente / Loja:</label>
-                <input
-                  type="text"
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="Ex: Loja Central - São Paulo"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Descrição do Produto / Item:</label>
-                <input
-                  type="text"
-                  value={itemDesc}
-                  onChange={(e) => setItemDesc(e.target.value)}
-                  placeholder="Ex: Balcão Promocional MDF 18mm Branco"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Quantidade & Unidade:</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={quantity}
-                    onChange={(e) => setQuantity(Number(e.target.value))}
-                    className="w-2/3 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                  />
-                  <input
-                    type="text"
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value)}
-                    className="w-1/3 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 uppercase"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Operador Responsável:</label>
-                <input
-                  type="text"
-                  value={operatorName}
-                  onChange={(e) => setOperatorName(e.target.value)}
-                  placeholder="Ex: Carlos Silva"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Código do Lote:</label>
-                <input
-                  type="text"
-                  value={lotCode}
-                  onChange={(e) => setLotCode(e.target.value)}
-                  placeholder="Ex: LOT-2608-1045"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Conteúdo do Código de Barras (OP - Loja - Descrição):</label>
-                <input
-                  type="text"
-                  value={barcodeValue}
-                  onChange={(e) => setBarcodeValue(e.target.value)}
-                  placeholder="Ex: OP-1045 - Loja Flamboyant - Vitrô 4F"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono text-slate-800"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Observações Adicionais:</label>
-                <input
-                  type="text"
-                  value={observations}
-                  onChange={(e) => setObservations(e.target.value)}
-                  placeholder="Ex: Embalagem reforçada / Cor Azul"
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Batch Print Options */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
-            <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <span className="material-symbols-outlined text-blue-600 text-[20px]">layers</span>
-              <span>3. Opções de Impressão em Lote</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Número de Cópias (Etiquetas em Sequência):
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={200}
-                  value={copiesCount}
-                  onChange={(e) => setCopiesCount(Math.max(1, Number(e.target.value)))}
-                  className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 bg-slate-50"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-4">
+            {/* 3 Toggle Checkboxes */}
+            <div className="grid grid-cols-3 gap-2">
+              <label className="flex items-center gap-2 px-2.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition-colors">
                 <input
                   type="checkbox"
-                  id="volSeq"
-                  checked={isVolumeSequential}
-                  onChange={(e) => setIsVolumeSequential(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded-md border-slate-300 focus:ring-blue-500 cursor-pointer"
+                  checked={showOperator}
+                  onChange={(e) => setShowOperator(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer shrink-0"
                 />
-                <label htmlFor="volSeq" className="text-xs font-bold text-slate-800 cursor-pointer">
-                  Numerar Volumes Sequencialmente (VOL 1/N, VOL 2/N)
-                </label>
+                <span className="text-[11px] font-semibold text-slate-700 truncate">Ver Operador</span>
+              </label>
+
+              <label className="flex items-center gap-2 px-2.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showDate}
+                  onChange={(e) => setShowDate(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer shrink-0"
+                />
+                <span className="text-[11px] font-semibold text-slate-700 truncate">Ver Data</span>
+              </label>
+
+              <label className="flex items-center gap-2 px-2.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showBarcode}
+                  onChange={(e) => setShowBarcode(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer shrink-0"
+                />
+                <span className="text-[11px] font-semibold text-slate-700 truncate">Ver Cód. Barras</span>
+              </label>
+            </div>
+
+            {/* Tamanho da Letra do Item */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium text-slate-500">Tamanho da Letra do Item:</span>
+              <div className="inline-flex bg-slate-100/90 border border-slate-200/80 rounded-lg p-0.5">
+                {(['PEQ', 'MÉD', 'GRD'] as ItemFontSize[]).map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => setItemFontSize(sz)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] transition-all cursor-pointer ${
+                      itemFontSize === sz
+                        ? 'bg-white text-slate-900 font-extrabold shadow-2xs border border-slate-200/60'
+                        : 'text-slate-500 font-semibold hover:text-slate-800'
+                    }`}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Formato do Papel / Etiqueta */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                <LayoutGrid className="w-3.5 h-3.5 text-slate-400" />
+                <span>Formato do Papel / Etiqueta:</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 bg-slate-100/90 border border-slate-200/80 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => setPaperFormat('100x30')}
+                  className={`py-2 px-3 rounded-lg text-xs transition-all cursor-pointer ${
+                    paperFormat === '100x30'
+                      ? 'bg-white text-slate-900 font-bold shadow-xs'
+                      : 'text-slate-500 font-semibold hover:text-slate-700'
+                  }`}
+                >
+                  Padrão (100x30mm)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaperFormat('100x220')}
+                  className={`py-2 px-3 rounded-lg text-xs transition-all cursor-pointer ${
+                    paperFormat === '100x220'
+                      ? 'bg-white text-slate-900 font-bold shadow-xs'
+                      : 'text-slate-500 font-semibold hover:text-slate-700'
+                  }`}
+                >
+                  Agrupado (100x220mm)
+                </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Preview Panel (5 Cols) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-md sticky top-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-400 text-[20px]">visibility</span>
-                <span className="font-bold text-sm tracking-wide">Pré-visualização Térmica</span>
-              </div>
-              
-              <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg text-xs">
-                <button
-                  type="button"
-                  onClick={() => setPreviewZoom(100)}
-                  className={`px-2 py-0.5 rounded font-bold ${previewZoom === 100 ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
-                >
-                  100%
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewZoom(130)}
-                  className={`px-2 py-0.5 rounded font-bold ${previewZoom === 130 ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
-                >
-                  130%
-                </button>
-              </div>
-            </div>
-
-            {/* Label Canvas Container */}
-            <div className="bg-slate-800 p-6 rounded-xl flex items-center justify-center min-h-[220px] overflow-x-auto border border-slate-700">
-              <div
-                style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'center center' }}
-                className="transition-transform duration-200 shadow-xl"
+        {/* RIGHT COLUMN: TABS & WORKSPACE CANVAS */}
+        <div className="lg:col-span-7 flex flex-col">
+          {/* Top Navigation Tabs + Direct Print Button */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setActiveRightTab('labels')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  activeRightTab === 'labels'
+                    ? 'bg-white text-slate-900 border border-slate-200/90 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                }`}
               >
-                {renderLabelContent(0)}
-              </div>
+                <Layers className={`w-3.5 h-3.5 ${activeRightTab === 'labels' ? 'text-indigo-600' : 'text-slate-400'}`} />
+                <span>ETIQUETAS ({displayLabelsBadgeCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveRightTab('zpl')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  activeRightTab === 'zpl'
+                    ? 'bg-white text-slate-900 border border-slate-200/90 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                }`}
+              >
+                <Code2 className={`w-3.5 h-3.5 ${activeRightTab === 'zpl' ? 'text-amber-600' : 'text-amber-500/80'}`} />
+                <span>CÓDIGO ZPL</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveRightTab('database')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  activeRightTab === 'database'
+                    ? 'bg-white text-slate-900 border border-slate-200/90 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-white/60'
+                }`}
+              >
+                <Database className={`w-3.5 h-3.5 ${activeRightTab === 'database' ? 'text-emerald-600' : 'text-emerald-500/80'}`} />
+                <span>BANCO DE DADOS</span>
+              </button>
             </div>
 
-            {/* Print Specs Summary */}
-            <div className="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-xs text-slate-300 space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Modelo Impressora:</span>
-                <strong className="text-white">Zebra ZD220 (ou compatível)</strong>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Dimensão Física:</span>
-                <strong className="text-emerald-400">{selectedPreset === '100x30' ? '100mm x 30mm (10x3 cm)' : selectedPreset === '100x50' ? '100mm x 50mm' : '100mm x 150mm'}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Total a Imprimir:</span>
-                <strong className="text-white">{copiesCount} {copiesCount === 1 ? 'etiqueta' : 'etiquetas físicas'}</strong>
-              </div>
-            </div>
-
-            {/* Action Print Button Group */}
-            <div className="space-y-2 pt-1">
+            {totalLabelsCount > 0 && activeRightTab === 'labels' && (
               <button
                 type="button"
                 onClick={handlePrint}
                 disabled={isPrinting}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-75 text-white font-black rounded-xl text-sm transition-all flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-[0.98]"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-75 text-white font-bold rounded-xl text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-[0.98]"
               >
-                {isPrinting ? (
-                  <>
-                    <span className="material-symbols-outlined text-[22px] animate-spin">progress_activity</span>
-                    <span>ENVIANDO PARA ZEBRA ZD220...</span>
-                  </>
+                <Printer className="w-3.5 h-3.5" />
+                <span>
+                  {isPrinting
+                    ? 'Enviando...'
+                    : `Imprimir Zebra ZD220 (${displayLabelsBadgeCount})`}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Main Right Content Surface */}
+          <div className="bg-slate-200/45 border border-slate-200/90 rounded-2xl min-h-[575px] flex flex-col overflow-hidden">
+            {/* TAB 1: ETIQUETAS */}
+            {activeRightTab === 'labels' && (
+              <>
+                {totalLabelsCount === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                    <Barcode className="w-12 h-12 text-slate-300 stroke-[1.4]" />
+                    <h3 className="text-sm font-extrabold text-slate-700 mt-3">
+                      Nenhum item na lista
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1.5 max-w-[270px] leading-relaxed">
+                      Insira o nome de alguma peça no painel esquerdo para que as etiquetas sejam geradas automaticamente.
+                    </p>
+                  </div>
                 ) : (
-                  <>
-                    <span className="material-symbols-outlined text-[22px]">print</span>
-                    <span>ENVIAR PARA IMPRESSORA ZEBRA (ZD220)</span>
-                  </>
+                  <div className="flex-1 flex flex-col">
+                    {/* Preview Toolbar */}
+                    <div className="bg-white/90 border-b border-slate-200/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">
+                          {DEFAULT_PRINTER}
+                        </span>
+                        <span>
+                          Formato: <strong>{paperFormat === '100x30' ? '100x30mm' : '100x220mm'}</strong>
+                        </span>
+                        {printStatusMessage && (
+                          <span className="text-blue-600 font-bold ml-2">{printStatusMessage}</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5 text-[11px]">
+                          {[100, 120].map((z) => (
+                            <button
+                              key={z}
+                              type="button"
+                              onClick={() => setPreviewZoom(z)}
+                              className={`px-2 py-0.5 rounded font-bold cursor-pointer ${
+                                previewZoom === z ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500'
+                              }`}
+                            >
+                              {z}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Labels Visual Scroll Canvas */}
+                    <div className="flex-1 p-5 sm:p-6 overflow-y-auto max-h-[640px] flex flex-col items-center gap-4">
+                      {paperFormat === '100x30'
+                        ? physicalLabels.map((inst) => (
+                            <div
+                              key={inst.key}
+                              style={{
+                                transform: `scale(${previewZoom / 100})`,
+                                transformOrigin: 'top center',
+                                marginBottom: previewZoom > 100 ? '18px' : '0px',
+                              }}
+                              className="shadow-md bg-white transition-transform duration-150 shrink-0"
+                            >
+                              {renderStandardLabel(inst)}
+                            </div>
+                          ))
+                        : groupedSheets.map((sheetItems, sIdx) => (
+                            <div
+                              key={`sheet-${sIdx}`}
+                              style={{
+                                transform: `scale(${previewZoom / 100})`,
+                                transformOrigin: 'top center',
+                              }}
+                              className="shadow-md bg-white transition-transform duration-150 shrink-0"
+                            >
+                              {renderGroupedSheet(sheetItems, sIdx, groupedSheets.length)}
+                            </div>
+                          ))}
+                    </div>
+                  </div>
                 )}
-              </button>
+              </>
+            )}
 
-              <button
-                type="button"
-                onClick={handleOpenInNewTab}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                title="Abre a visualização de impressão numa nova janela/aba caso seu navegador bloqueie diálogos diretos"
-              >
-                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                <span>Abrir em Nova Aba (Alternativa de Impressão)</span>
-              </button>
+            {/* TAB 2: CÓDIGO ZPL */}
+            {activeRightTab === 'zpl' && (
+              <div className="flex-1 flex flex-col p-4 sm:p-5 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                      Código ZPL II — Zebra ZD220 (203 DPI)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Comandos nativos gerados automaticamente a partir da lista e configurações do painel.
+                    </p>
+                  </div>
 
-              {printStatusMessage && (
-                <div className="p-2.5 bg-blue-900/60 border border-blue-600/40 rounded-xl text-[11px] text-blue-200 text-center font-medium animate-fadeIn">
-                  {printStatusMessage}
+                  {generatedZplCode && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyZpl}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        {zplCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{zplCopied ? 'Copiado!' : 'Copiar ZPL'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadZpl}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Baixar .ZPL</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+
+                {generatedZplCode ? (
+                  <pre className="flex-1 bg-slate-900 text-emerald-300 font-mono text-[11px] leading-relaxed p-4 rounded-xl overflow-auto max-h-[480px] border border-slate-800 select-all">
+                    {generatedZplCode}
+                  </pre>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                    <Code2 className="w-10 h-10 text-slate-300" />
+                    <p className="text-sm font-bold text-slate-600 mt-3">Nenhum código ZPL gerado</p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-[260px]">
+                      Adicione peças no painel esquerdo para visualizar e exportar o código ZPL II da Zebra ZD220.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: BANCO DE DADOS */}
+            {activeRightTab === 'database' && (
+              <div className="flex-1 flex flex-col bg-white/70">
+                <div className="p-4 border-b border-slate-200/80 space-y-3 bg-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                        Ordens de Produção do Sistema (PCP)
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Selecione peças do banco de dados para adicionar à lista de impressão em lote.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsBatchModalOpen(true)}
+                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Lote Concluídos</span>
+                      </button>
+                      {filteredDbOrders.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleAddAllFilteredOrders}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Importar ({Math.min(50, filteredDbOrders.length)})</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Search & Status Filters */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={dbSearch}
+                        onChange={(e) => setDbSearch(e.target.value)}
+                        placeholder="Buscar OP, loja, peça, montador (use ';' para múltiplos)..."
+                        className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                      />
+                    </div>
+                    <select
+                      value={dbStatusFilter}
+                      onChange={(e) => setDbStatusFilter(e.target.value as typeof dbStatusFilter)}
+                      className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none"
+                    >
+                      <option value="all">Todos ({orders.length})</option>
+                      <option value="completed">Concluídos</option>
+                      <option value="active">Em Produção</option>
+                      <option value="pending">Aguardando Data</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Orders List */}
+                <div className="flex-1 overflow-y-auto max-h-[460px] divide-y divide-slate-100">
+                  {filteredDbOrders.length === 0 ? (
+                    <div className="p-10 text-center text-slate-400 text-xs">
+                      Nenhuma ordem encontrada no banco de dados para o filtro atual.
+                    </div>
+                  ) : (
+                    filteredDbOrders.slice(0, 100).map((ord) => {
+                      const isDone = ord.executionStatus === 'concluido' || ord.progress === 100;
+                      return (
+                        <div
+                          key={ord.id}
+                          className="px-4 py-3 bg-white hover:bg-slate-50/90 flex items-center justify-between gap-3 transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-slate-900">
+                                {ord.orderId || ord.id}
+                              </span>
+                              <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md truncate">
+                                {ord.store}
+                              </span>
+                              {isDone && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Concluído
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs font-semibold text-slate-700 truncate mt-0.5 uppercase">
+                              {ord.itemDescription}
+                            </p>
+                            <div className="flex items-center gap-3 text-[10.5px] text-slate-400 mt-0.5 font-medium">
+                              <span>Qtd: <strong className="text-slate-600">{ord.quantity || 1} {ord.unit || 'un'}</strong></span>
+                              {ord.assignedOperatorName && (
+                                <span>Montador: <strong className="text-slate-600">{ord.assignedOperatorName}</strong></span>
+                              )}
+                              {ord.productionDate && <span>Data: {ord.productionDate}</span>}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddOrderLine(ord)}
+                            className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold rounded-lg text-[11px] flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Adicionar</span>
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Hidden Print Container specifically targeted as source for direct printing and new tab */}
+      {/* Hidden Print Container specifically targeted as source for direct printing */}
       <div id="zebra-print-source" style={{ display: 'none' }}>
-        {Array.from({ length: copiesCount }).map((_, copyIndex) => (
-          <div key={copyIndex} className="zebra-label-print-page">
-            {renderLabelContent(copyIndex)}
-          </div>
-        ))}
+        {paperFormat === '100x30'
+          ? physicalLabels.map((inst) => (
+              <div key={`print-${inst.key}`} className="zebra-label-print-page">
+                {renderStandardLabel(inst)}
+              </div>
+            ))
+          : groupedSheets.map((sheetItems, sIdx) => (
+              <div key={`print-sheet-${sIdx}`} className="zebra-label-print-page">
+                {renderGroupedSheet(sheetItems, sIdx, groupedSheets.length)}
+              </div>
+            ))}
       </div>
 
-      {/* Batch Label Generator Modal */}
+      {/* Batch Label Generator Modal (for Completed Orders) */}
       {isBatchModalOpen && (
         <BatchLabelModal
           orders={orders.filter((o) => o.executionStatus === 'concluido' || o.progress === 100)}
           titleDate="Lote Geral de Concluídos"
-          defaultCompanyHeader={companyHeader}
           onClose={() => setIsBatchModalOpen(false)}
         />
       )}
